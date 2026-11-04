@@ -5,6 +5,8 @@ const DEFAULTS = {
   deviceSecret: '',
   itManagerEmail: '',
 };
+const PREVIOUS_SUPABASE_URL = 'https://uwjsmxvdsdozzimukael.supabase.co';
+const PREVIOUS_SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_BU7kYL8KZuFAa06SglHykw_6U1044Ud';
 
 const form = document.getElementById('settings-form');
 const statusBox = document.getElementById('status');
@@ -16,8 +18,17 @@ function updateStatus(message, isError = false) {
 
 async function loadSettings() {
   const data = await chrome.storage.local.get(Object.keys(DEFAULTS));
-  document.getElementById('supabase-url').value = data.supabaseUrl || DEFAULTS.supabaseUrl;
-  document.getElementById('supabase-anon-key').value = data.supabaseAnonKey || DEFAULTS.supabaseAnonKey;
+  const supabaseUrl = !data.supabaseUrl || data.supabaseUrl === PREVIOUS_SUPABASE_URL
+    ? DEFAULTS.supabaseUrl
+    : data.supabaseUrl;
+  const supabaseAnonKey = !data.supabaseAnonKey || data.supabaseAnonKey === PREVIOUS_SUPABASE_PUBLISHABLE_KEY
+    ? DEFAULTS.supabaseAnonKey
+    : data.supabaseAnonKey;
+  if (supabaseUrl !== data.supabaseUrl || supabaseAnonKey !== data.supabaseAnonKey) {
+    await chrome.storage.local.set({ supabaseUrl, supabaseAnonKey });
+  }
+  document.getElementById('supabase-url').value = supabaseUrl;
+  document.getElementById('supabase-anon-key').value = supabaseAnonKey;
   document.getElementById('device-id').value = data.deviceId || '';
   document.getElementById('device-secret').value = data.deviceSecret || '';
   document.getElementById('it-manager-email').value = data.itManagerEmail || '';

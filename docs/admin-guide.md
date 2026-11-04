@@ -35,5 +35,5 @@ When enabled, both registry values should be `1`; when disabled, they should mat
 - Provision a separate random token for each registered device with `node backend/provision-agent.js <device-row-id>`.
 - Store only the token hash in Supabase; the one-time plaintext token is entered during the elevated agent installation.
 - The agent config is restricted to SYSTEM and local Administrators. Reprovisioning rotates the token and invalidates the previous one.
-- Keep the API on HTTPS and the Supabase service-role key on the backend only.
+- Keep the API on HTTPS and the Supabase secret key on the backend only.
 - An unmanaged user with local administrator rights can change registry settings or remove the task; use enterprise device management to harden company laptops.

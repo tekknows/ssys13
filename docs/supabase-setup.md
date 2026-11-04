@@ -53,19 +53,22 @@ The schema also includes `changelog` for update-log entries and fields for the t
 
 ## 3) Add the required environment variables
 
-Set these values in the backend process environment:
+Set these values in the backend process environment or a local, Git-ignored `.env.local`:
 
 ```bash
 SUPABASE_URL=https://your-project.supabase.co
-SUPABASE_SERVICE_ROLE_KEY=server_only_service_role_key
+SUPABASE_PUBLISHABLE_KEY=your_publishable_key
+SUPABASE_SECRET_KEY=server_only_secret_key
 ADMIN_SESSION_SECRET=a_random_secret_at_least_32_characters
 ALLOWED_ORIGINS=https://admin.example.com
+PORT=3000
+API_BASE_URL=http://localhost:3000/api/supabase-sync
 ```
 
-Keep `SUPABASE_SERVICE_ROLE_KEY` and `ADMIN_SESSION_SECRET` in the backend process environment only; never put them in browser code or extension storage. Set `ALLOWED_ORIGINS` to the exact dashboard origin(s). Start the API with `npm run start:backend` and configure the dashboard's `apiBaseUrl` to reach `/api/supabase-sync` (or proxy that path to the API). The API validates custom dashboard credentials against `user_credentials` and the administrator role against `employees`, issues a short-lived HMAC-signed admin session, and rechecks active administrator status for protected policy and sync operations. Deploy the API behind HTTPS and rate limiting.
+Keep `SUPABASE_SECRET_KEY` and `ADMIN_SESSION_SECRET` in the backend process environment only; never put them in browser code or extension storage. The dashboard and extension may use `SUPABASE_PUBLISHABLE_KEY`. Set `ALLOWED_ORIGINS` to the exact dashboard origin(s). Start the API with `npm run start:backend` and configure the dashboard's `apiBaseUrl` to reach `/api/supabase-sync` (or proxy that path to the API). The API validates custom dashboard credentials against `user_credentials` and the administrator role against `employees`, issues a short-lived HMAC-signed admin session, and rechecks active administrator status for protected policy and sync operations. Deploy the API behind HTTPS and rate limiting.
 
 The dashboard's local browser login alone is not API authentication. Only the server-issued signed session can authorize privileged writes.
-The static dashboard reads runtime values from `window.__APP_CONFIG__` before `dashboard/config.js` loads, or from the existing `localStorage` entries `supabaseUrl`, `supabaseAnonKey`, and `apiBaseUrl`. It does not read a backend `.env` file.
+The static dashboard reads runtime values from `window.__APP_CONFIG__` before `dashboard/config.js` loads, or from the existing `localStorage` entries `supabaseUrl`, `supabaseAnonKey`, and `apiBaseUrl`. It does not read a backend `.env.local` file. Known previous default Supabase settings are migrated to the current project; user-specified custom URLs and keys are preserved.
 
 ## 4) Configure the extension
 

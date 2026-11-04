@@ -35,7 +35,7 @@ The code does not intentionally access or store:
 - There is no login-form injection or password field read in the extension code.
 - It records only the domain and limited metadata from navigation events.
 - It does not transmit browsing information to unapproved external services.
-- Supabase credentials are configured outside the extension package and never exposed as service-role keys.
+- Supabase secret keys are configured on the backend only; the browser dashboard and extension use only the publishable key.
 - The Windows policy agent sends only its registered device ID and an authenticated policy request; it does not collect browsing data. The backend stores a hash of each device token, and the agent keeps the token in an ACL-protected machine configuration file.
 - For Incognito enforcement, the agent reads or writes only the Chrome `IncognitoModeAvailability` and Edge `InPrivateModeAvailability` registry values. It snapshots and restores their prior values rather than resetting other browser policy.
 

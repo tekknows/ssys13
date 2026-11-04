@@ -1,5 +1,9 @@
 window.__APP_CONFIG__ = window.__APP_CONFIG__ || {};
 
+const DEFAULT_SUPABASE_URL = 'https://owuottmockghwcysnfig.supabase.co';
+const DEFAULT_SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_dLvhzyFjokO9E6BnMsvblg_MmLaNNaR';
+const PREVIOUS_SUPABASE_URL = 'https://uwjsmxvdsdozzimukael.supabase.co';
+const PREVIOUS_SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_BU7kYL8KZuFAa06SglHykw_6U1044Ud';
 const envUrl = String(window.__APP_CONFIG__.supabaseUrl || '').trim();
 const envAnonKey = String(window.__APP_CONFIG__.supabaseAnonKey || '').trim();
 const envApiBaseUrl = String(window.__APP_CONFIG__.apiBaseUrl || '').trim();
@@ -28,10 +32,22 @@ const storedApiBaseUrl = (() => {
   }
 })();
 
-window.__APP_CONFIG__.supabaseUrl = envUrl || storedUrl || 'https://owuottmockghwcysnfig.supabase.co';
-window.__APP_CONFIG__.supabaseAnonKey = envAnonKey || storedAnonKey || 'sb_publishable_dLvhzyFjokO9E6BnMsvblg_MmLaNNaR';
+const resolvedUrl = envUrl || (storedUrl && storedUrl !== PREVIOUS_SUPABASE_URL ? storedUrl : DEFAULT_SUPABASE_URL);
+const resolvedPublishableKey = envAnonKey || (storedAnonKey && storedAnonKey !== PREVIOUS_SUPABASE_PUBLISHABLE_KEY
+  ? storedAnonKey
+  : DEFAULT_SUPABASE_PUBLISHABLE_KEY);
+
+window.__APP_CONFIG__.supabaseUrl = resolvedUrl;
+window.__APP_CONFIG__.supabaseAnonKey = resolvedPublishableKey;
 window.__APP_CONFIG__.apiBaseUrl = envApiBaseUrl || storedApiBaseUrl || 'http://localhost:3000/api/supabase-sync';
 window.__APP_CONFIG__.serverSyncUrl = window.__APP_CONFIG__.apiBaseUrl;
+
+try {
+  if (storedUrl === PREVIOUS_SUPABASE_URL) localStorage.setItem('supabaseUrl', DEFAULT_SUPABASE_URL);
+  if (storedAnonKey === PREVIOUS_SUPABASE_PUBLISHABLE_KEY) localStorage.setItem('supabaseAnonKey', DEFAULT_SUPABASE_PUBLISHABLE_KEY);
+} catch (error) {
+  console.warn('Unable to migrate saved Supabase browser configuration.', error);
+}
 
 window.__APP_CONFIG__.validateSupabaseConfig = function validateSupabaseConfig() {
   const url = String(window.__APP_CONFIG__.supabaseUrl || '').trim();

@@ -67,13 +67,13 @@ For server-side state sync, set these environment variables for the backend proc
 
 ```text
 SUPABASE_URL=https://your-project.supabase.co
-SUPABASE_SERVICE_ROLE_KEY=server_only_service_role_key
+SUPABASE_SECRET_KEY=server_only_secret_key
 ADMIN_SESSION_SECRET=a_random_secret_at_least_32_characters
 ALLOWED_ORIGINS=http://localhost:8000,http://127.0.0.1:8000
 PORT=3000
 ```
 
-Generate a signing secret with `node -e "console.log(require('node:crypto').randomBytes(48).toString('base64url'))"`. Set `ALLOWED_ORIGINS` to the exact dashboard origins; install dependencies with `npm install`, then start the API with `npm run start:backend`. Keep both secrets server-side. The API validates the administrator password and role against Supabase, issues a short-lived signed session, and rechecks the administrator role for protected operations. Deploy the API behind HTTPS and a rate-limiting reverse proxy; never expose the service-role key.
+Generate a signing secret with `node -e "console.log(require('node:crypto').randomBytes(48).toString('base64url'))"`. Set `ALLOWED_ORIGINS` to the exact dashboard origins; install dependencies with `npm install`, then start the API with `npm run start:backend`. Keep both secrets server-side. The API validates the administrator password and role against Supabase, issues a short-lived signed session, and rechecks the administrator role for protected operations. Deploy the API behind HTTPS and a rate-limiting reverse proxy; never expose the Supabase secret key.
 
 For local development, the backend loads `.env.local` when present; that file is ignored by Git. The dashboard and extension use the public publishable key only. Never copy `SUPABASE_SECRET_KEY` into dashboard or extension code.
 
