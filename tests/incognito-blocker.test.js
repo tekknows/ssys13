@@ -196,7 +196,7 @@ test('browser extension retrieves Incognito policy through its authenticated man
   const policyMigration = fs.readFileSync(path.join(__dirname, '..', 'supabase', 'migrations', '20261104172000_incognito_blocking.sql'), 'utf8');
   assert.match(background, /\/api\/agent\/incognito-policy\?deviceId=/);
   assert.doesNotMatch(background, /\/rest\/v1\/incognito_control/);
-  assert.match(policyMigration, /revoke all on public\.incognito_control from public, anon, authenticated/);
+  assert.match(policyMigration, /revoke all on public\.incognito_control from anon;[\s\S]*revoke all on public\.incognito_control from authenticated;[\s\S]*revoke all on public\.incognito_control from PUBLIC;/);
   assert.doesNotMatch(policyMigration, /incognito_control_public_read/);
 });
 
