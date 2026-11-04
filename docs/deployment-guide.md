@@ -5,18 +5,28 @@
 1. Back up the existing MINDLOCK Supabase project and inspect any existing tables with the same names.
 2. Run [`supabase/migrations/20261104160000_system_backend.sql`](../supabase/migrations/20261104160000_system_backend.sql), [`supabase/migrations/20261104172000_incognito_blocking.sql`](../supabase/migrations/20261104172000_incognito_blocking.sql), and [`supabase/migrations/20261106120000_changelog_retention.sql`](../supabase/migrations/20261106120000_changelog_retention.sql), in the Supabase SQL editor.
 3. Configure `SUPABASE_URL`, `SUPABASE_SECRET_KEY`, a unique `ADMIN_SESSION_SECRET` (at least 32 characters), and exact dashboard/extension origins in `ALLOWED_ORIGINS` in the backend environment. Keep the Supabase secret key and signing secret on the backend only.
-4. Serve the dashboard locally:
+4. Start the management API in one terminal:
+
+   ```powershell
+   npm run start:backend
+   ```
+
+   Keep this terminal open. Confirm it prints `Secure Supabase sync backend
+   running on port 3000`. If login reports a Supabase connection error, check
+   the backend terminal and verify that `SUPABASE_URL` in the backend
+   environment or `.env.local` is the active project's URL and resolves in DNS.
+5. Serve the dashboard locally in a separate terminal:
 
    ```bash
-   cd d:/sys13
+   cd D:/ssys13
    python -m http.server 8000
    ```
 
-5. For separate local ports, set `localStorage.setItem('apiBaseUrl', 'http://localhost:3000/api/supabase-sync')` in the dashboard origin's browser console, then reload. In production, serve the management API through the same HTTPS origin or configure the dashboard's `apiBaseUrl` to the API endpoint. The static dashboard reads injected `window.__APP_CONFIG__` values or its existing local browser config; it does not load `.env` files.
-6. Open `http://localhost:8000/dashboard/` and sign in with an administrator account present in `user_credentials` and `employees`. The Incognito toggle lives in the existing Incognito blocker panel; the settings endpoint requires an active administrator session.
-7. For each already registered and assigned laptop, run `node backend/provision-agent.js <device-row-id>` on the backend host. Send the one-time token securely to the matching laptop.
-8. On the laptop, open elevated PowerShell in `windows-agent/` and run `.\Install-Mindlock-PolicyAgent.ps1 -ApiBaseUrl https://your-management-api.example -DeviceId <device-row-id>`. Enter the token at the prompt. The installer creates a SYSTEM startup task and the agent immediately checks the global policy.
-9. Newly registered laptops do not need a per-laptop policy toggle; provision their agent once and they inherit the current global setting on their first successful check.
+6. For separate local ports, the dashboard's default API URL is `http://localhost:3000/api/supabase-sync`. In production, serve the management API through the same HTTPS origin or configure the dashboard's `apiBaseUrl` to the API endpoint. The static dashboard reads injected `window.__APP_CONFIG__` values or its existing local browser config; it does not load `.env` files.
+7. Open `http://localhost:8000/dashboard/` and sign in with an administrator account present in `user_credentials` and `employees`. The Incognito toggle lives in the existing Incognito blocker panel; the settings endpoint requires an active administrator session.
+8. For each already registered and assigned laptop, run `node backend/provision-agent.js <device-row-id>` on the backend host. Send the one-time token securely to the matching laptop.
+9. On the laptop, open elevated PowerShell in `windows-agent/` and run `.\Install-Mindlock-PolicyAgent.ps1 -ApiBaseUrl https://your-management-api.example -DeviceId <device-row-id>`. Enter the token at the prompt. The installer creates a SYSTEM startup task and the agent immediately checks the global policy.
+10. Newly registered laptops do not need a per-laptop policy toggle; provision their agent once and they inherit the current global setting on their first successful check.
 
 ## Browser Web Store distribution
 

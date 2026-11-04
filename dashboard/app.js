@@ -823,7 +823,12 @@ async function establishAdminApiSession(email, password) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, password }),
     });
-    const payload = await response.json();
+    let payload;
+    try {
+      payload = await response.json();
+    } catch (error) {
+      throw new Error(`Management API returned an invalid response (${response.status}).`);
+    }
     if (!response.ok || !payload.token) {
       throw new Error(payload.error || 'The management API did not issue an administrator session.');
     }
@@ -832,8 +837,10 @@ async function establishAdminApiSession(email, password) {
     return true;
   } catch (error) {
     clearAdminApiSession();
-    console.warn('Administrator management session could not be established.', error);
-    return false;
+    if (error instanceof TypeError) {
+      throw new Error('Cannot reach the management API. Start the backend and check its configured URL.');
+    }
+    throw error;
   }
 }
 
@@ -1126,8 +1133,19 @@ async function loginUser(event) {
   const errorBox = document.getElementById('login-error');
   const enteredEmail = (emailInput?.value || '').trim().toLowerCase();
   const enteredPassword = passwordInput?.value || '';
-  if (!enteredEmail || !enteredPassword || !await establishAdminApiSession(enteredEmail, enteredPassword)) {
-    if (errorBox) errorBox.textContent = 'Invalid administrator credentials or management API unavailable.';
+  if (!enteredEmail || !enteredPassword) {
+    if (errorBox) errorBox.textContent = 'Enter your administrator email and password.';
+    return;
+  }
+
+  try {
+    await establishAdminApiSession(enteredEmail, enteredPassword);
+  } catch (error) {
+    if (errorBox) {
+      errorBox.textContent = error.message === 'Invalid administrator credentials.'
+        ? error.message
+        : `${error.message} Check the backend terminal for details; for Supabase connection errors, verify the project URL and DNS.`;
+    }
     return;
   }
 
