@@ -4,7 +4,7 @@
 
 Use the single **Incognito blocker** toggle in the dashboard's existing Incognito blocker panel. It applies to all registered, assigned laptops that have a provisioned Windows management agent. The registered-laptop count is informational; there are no per-laptop policy toggles or sync-status badges.
 
-Only an active administrator can change the setting. The backend stores the authoritative global value in `system_policies` under `incognito_blocking`; it also updates the legacy `incognito_control` record for compatibility with the extension's existing Incognito-tab handling.
+Only an active administrator can change the setting. The backend stores the authoritative global value in `system_policies` under `incognito_blocking`. The legacy `incognito_control` row is retained only as a migration compatibility seed; current agents and extensions read the policy from the authenticated management API.
 
 ## Windows enforcement
 

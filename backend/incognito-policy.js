@@ -54,7 +54,7 @@ async function findAdministrator(email, env = process.env) {
 
 async function issueAdministratorSession(email, password, env = process.env) {
   const normalizedEmail = String(email || '').trim().toLowerCase();
-  if (!normalizedEmail || typeof password !== 'string' || password.length === 0 || password.length > 1024) {
+  if (!normalizedEmail || typeof password !== 'string' || password.length === 0) {
     return null;
   }
 
@@ -156,10 +156,14 @@ async function getIncognitoPolicySummary(env = process.env) {
 }
 
 async function updateIncognitoPolicy(isEnabled, updatedBy, env = process.env) {
-  const { error } = await getSupabaseClient(env).rpc('set_incognito_blocking_policy', {
-    p_is_enabled: Boolean(isEnabled),
-    p_updated_by: String(updatedBy || '').trim().toLowerCase(),
-  });
+  const { error } = await getSupabaseClient(env)
+    .from('system_policies')
+    .upsert({
+      policy_name: POLICY_NAME,
+      is_enabled: Boolean(isEnabled),
+      updated_by: String(updatedBy || '').trim().toLowerCase(),
+      updated_at: new Date().toISOString(),
+    }, { onConflict: 'policy_name' });
   if (error) throw error;
   return getIncognitoPolicySummary(env);
 }

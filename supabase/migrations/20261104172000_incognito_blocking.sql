@@ -49,34 +49,3 @@ revoke all on public.device_agent_credentials from anon;
 revoke all on public.device_agent_credentials from authenticated;
 revoke all on public.device_agent_credentials from PUBLIC;
 grant select, insert, update, delete on public.device_agent_credentials to service_role;
-
-create or replace function public.set_incognito_blocking_policy(
-  p_is_enabled boolean,
-  p_updated_by text
-)
-returns void
-language plpgsql
-security definer
-set search_path = pg_catalog, public, pg_temp
-as $$
-begin
-  insert into public.system_policies (policy_name, is_enabled, updated_by, updated_at)
-  values ('incognito_blocking', p_is_enabled, p_updated_by, now())
-  on conflict (policy_name) do update
-    set is_enabled = excluded.is_enabled,
-        updated_by = excluded.updated_by,
-        updated_at = excluded.updated_at;
-
-  insert into public.incognito_control (id, enabled)
-  values (1, p_is_enabled)
-  on conflict (id) do update
-    set enabled = excluded.enabled;
-end;
-$$;
-
-revoke all on function public.set_incognito_blocking_policy(boolean, text) from anon;
-revoke all on function public.set_incognito_blocking_policy(boolean, text) from authenticated;
-revoke all on function public.set_incognito_blocking_policy(boolean, text) from PUBLIC;
-grant execute on function public.set_incognito_blocking_policy(boolean, text) to service_role;
-
-commit;

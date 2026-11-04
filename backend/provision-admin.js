@@ -9,8 +9,8 @@ async function provisionAdministrator(env = process.env) {
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     throw new Error('Set ADMIN_EMAIL to a valid administrator email address.');
   }
-  if (password.length < 12 || password.length > 1024) {
-    throw new Error('Set ADMIN_PASSWORD to a password between 12 and 1024 characters.');
+  if (password.length < 8) {
+    throw new Error('Set ADMIN_PASSWORD to a password with at least 8 characters.');
   }
 
   const client = getSupabaseClient(env);

@@ -22,6 +22,14 @@ test('administrator provisioned passwords use scrypt and verify correctly', () =
   assert.equal(verifyPassword('incorrect-password', hash), false);
 });
 
+test('administrator provisioning requires at least 8 characters without a maximum', () => {
+  const provisioner = fs.readFileSync(path.join(__dirname, '..', 'backend', 'provision-admin.js'), 'utf8');
+  const auth = fs.readFileSync(path.join(__dirname, '..', 'backend', 'incognito-policy.js'), 'utf8');
+  assert.match(provisioner, /password\.length < 8/);
+  assert.doesNotMatch(provisioner, /password\.length\s*>/);
+  assert.doesNotMatch(auth, /password\.length\s*>/);
+});
+
 test('secure state reads and writes omit credentials and device secrets', () => {
   assert.deepEqual(stripSensitiveData({
     email: 'admin@example.com',
@@ -91,12 +99,16 @@ test('administrator sessions require a valid password and administrator role', a
 test('global policy update uses the singleton policy and counts registered managed devices', async () => {
   const originalFetch = global.fetch;
   const requests = [];
+  let savedPolicy;
   global.fetch = async (url, options = {}) => {
     const parsedUrl = new URL(url);
     requests.push({ path: parsedUrl.pathname, body: options.body ? JSON.parse(options.body) : null });
-    if (parsedUrl.pathname.endsWith('/rpc/set_incognito_blocking_policy')) return response(null);
+    if (parsedUrl.pathname.endsWith('/system_policies') && options.method === 'POST') {
+      savedPolicy = requests.at(-1).body;
+      return response(null);
+    }
     if (parsedUrl.pathname.endsWith('/system_policies')) {
-      return response([{ is_enabled: true, updated_at: '2026-11-04T00:00:00.000Z', updated_by: 'admin@example.com' }]);
+      return response([savedPolicy]);
     }
     if (parsedUrl.pathname.endsWith('/devices') && options.method === 'HEAD') {
       return response(null, 200, { 'content-range': '*/2' });
@@ -108,10 +120,14 @@ test('global policy update uses the singleton policy and counts registered manag
     const result = await updateIncognitoPolicy(true, 'Admin@Example.com', env);
     assert.equal(result.isEnabled, true);
     assert.equal(result.registeredDevices, 2);
+    assert.equal(requests[0].path.endsWith('/system_policies'), true);
     assert.deepEqual(requests[0].body, {
-      p_is_enabled: true,
-      p_updated_by: 'admin@example.com',
+      policy_name: 'incognito_blocking',
+      is_enabled: true,
+      updated_by: 'admin@example.com',
+      updated_at: savedPolicy.updated_at,
     });
+    assert.equal(requests[0].body.updated_at, result.updatedAt);
   } finally {
     global.fetch = originalFetch;
   }
@@ -198,6 +214,7 @@ test('browser extension retrieves Incognito policy through its authenticated man
   assert.doesNotMatch(background, /\/rest\/v1\/incognito_control/);
   assert.match(policyMigration, /revoke all on public\.incognito_control from anon;[\s\S]*revoke all on public\.incognito_control from authenticated;[\s\S]*revoke all on public\.incognito_control from PUBLIC;/);
   assert.doesNotMatch(policyMigration, /incognito_control_public_read/);
+  assert.doesNotMatch(policyMigration, /create or replace function/i);
 });
 
 test('base database migration creates system tables with backend-only access', () => {
@@ -302,8 +319,10 @@ test('update log retention settings are saved and cleanup is administrator-only'
   assert.match(dashboard, /changelogAutoCleanupEnabled: 'changelog_auto_cleanup_enabled'/);
   assert.match(dashboard, /normalizeChangelogEntries[\s\S]*?return Array\.from\(uniqueEntries\.values\(\)\)[\s\S]*?;/);
   assert.match(backend, /url\.pathname === '\/api\/admin\/changelog\/cleanup'[\s\S]*?authenticateAdministrator\(getBearerToken\(req\)\)/);
-  assert.match(migration, /add column if not exists changelog_retention_days integer not null default 365/);
-  assert.match(migration, /add column if not exists changelog_auto_cleanup_enabled boolean not null default true/);
+  assert.match(migration, /add column changelog_retention_days integer not null default 365/);
+  assert.match(migration, /add column changelog_auto_cleanup_enabled boolean not null default true/);
+  assert.match(migration, /check \(changelog_retention_days between 0 and 36500\)/);
+  assert.doesNotMatch(migration, /^\s*(begin|commit)\s*;/im);
 });
 
 test('managed laptop policy sync adapts existing dashboard policies and scopes them to assigned employees', async () => {
