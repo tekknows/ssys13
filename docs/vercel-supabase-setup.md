@@ -36,7 +36,9 @@ read/write, Windows agent policy checks, and dashboard state sync. The adapter
 at [`api/[...path].js`](../api/[...path].js) exposes the backend routes as a
 Vercel Node.js Function, and
 [`api/admin/session.js`](../api/admin/session.js) explicitly registers the
-login endpoint so it is available at `/api/admin/session`.
+login endpoint so it is available at `/api/admin/session`. The root
+[`vercel.json`](../vercel.json) rewrites `/dashboard/...` URLs to the deployed
+dashboard files at the site root.
 
 Choose one of these approaches:
 
@@ -129,7 +131,8 @@ other administrators and browsers will not inherit it.
    the backend rejects browser requests.
 3. Commit and push the dashboard API URL configuration from Step 4, or deploy
    the equivalent runtime configuration through your existing build process.
-4. Redeploy the Vercel project.
+4. Redeploy the Vercel project so the API functions and the `/dashboard/...`
+   URL rewrites are applied.
 5. In the Vercel deployment, confirm
    `https://ssys13.vercel.app/api/health` returns
    `{"ok":true,"status":"ok"}`. Then check the dashboard's Network panel and
