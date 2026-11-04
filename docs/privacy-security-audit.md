@@ -36,10 +36,14 @@ The code does not intentionally access or store:
 - It records only the domain and limited metadata from navigation events.
 - It does not transmit browsing information to unapproved external services.
 - Supabase credentials are configured outside the extension package and never exposed as service-role keys.
+- The Windows policy agent sends only its registered device ID and an authenticated policy request; it does not collect browsing data. The backend stores a hash of each device token, and the agent keeps the token in an ACL-protected machine configuration file.
+- For Incognito enforcement, the agent reads or writes only the Chrome `IncognitoModeAvailability` and Edge `InPrivateModeAvailability` registry values. It snapshots and restores their prior values rather than resetting other browser policy.
 
 ## RLS and access control
 
 The Supabase schema requires authentication and enforces Row Level Security. Admins are restricted to authorized records, and limited device-scoped permissions are required for device-owned data.
+
+The new `system_policies` and `device_agent_credentials` tables have RLS enabled without anon/authenticated access policies. Privileged access is limited to the server-side service role; administrator requests also require a short-lived signed session validated against the current employee and credential records.
 
 ## Known limitations
 

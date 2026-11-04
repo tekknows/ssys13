@@ -1,14 +1,8 @@
 window.__APP_CONFIG__ = window.__APP_CONFIG__ || {};
 
-const envUrl = typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_SUPABASE_URL
-  ? String(import.meta.env.VITE_SUPABASE_URL).trim()
-  : '';
-const envAnonKey = typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY
-  ? String(import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY).trim()
-  : '';
-const envApiBaseUrl = typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_API_BASE_URL
-  ? String(import.meta.env.VITE_API_BASE_URL).trim()
-  : '';
+const envUrl = String(window.__APP_CONFIG__.supabaseUrl || '').trim();
+const envAnonKey = String(window.__APP_CONFIG__.supabaseAnonKey || '').trim();
+const envApiBaseUrl = String(window.__APP_CONFIG__.apiBaseUrl || '').trim();
 
 const storedUrl = (() => {
   try {

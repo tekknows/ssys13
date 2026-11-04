@@ -17,7 +17,10 @@ const DEFAULT_SYNC_IDS = {
   ticketSettings: '10000000-0000-4000-8000-000000000003',
   incognitoControl: 1,
 };
-let incognitoControlSyncSucceeded = null;
+let incognitoPolicySummary = {
+  enabled: null,
+  registeredDevices: null,
+};
 
 const demoState = {
   devices: [],
@@ -1021,6 +1024,54 @@ function getSecureSyncEndpoint() {
     : `/${candidate}`;
 }
 
+function getAdminApiSessionToken() {
+  try {
+    return sessionStorage.getItem('mindlock-admin-api-session') || '';
+  } catch (error) {
+    return '';
+  }
+}
+
+function clearAdminApiSession() {
+  try {
+    sessionStorage.removeItem('mindlock-admin-api-session');
+  } catch (error) {
+    console.warn('Unable to clear the management API session.', error);
+  }
+}
+
+function getManagementApiEndpoint(path) {
+  const runtimeConfig = typeof window !== 'undefined' && window.__APP_CONFIG__ && typeof window.__APP_CONFIG__ === 'object'
+    ? window.__APP_CONFIG__
+    : {};
+  const configuredEndpoint = String(runtimeConfig.apiBaseUrl || runtimeConfig.serverSyncUrl || '').trim();
+  if (configuredEndpoint.startsWith('https://') || configuredEndpoint.startsWith('http://')) {
+    return new URL(path, configuredEndpoint).toString();
+  }
+  return path;
+}
+
+async function establishAdminApiSession(email, password) {
+  try {
+    const response = await fetch(getManagementApiEndpoint('/api/admin/session'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password }),
+    });
+    const payload = await response.json();
+    if (!response.ok || !payload.token) {
+      throw new Error(payload.error || 'The management API did not issue an administrator session.');
+    }
+
+    sessionStorage.setItem('mindlock-admin-api-session', payload.token);
+    return true;
+  } catch (error) {
+    clearAdminApiSession();
+    console.warn('Administrator management session could not be established.', error);
+    return false;
+  }
+}
+
 async function hydrateStateFromSupabase() {
   const client = getSupabaseClient();
   if (!client) return null;
@@ -1140,6 +1191,7 @@ async function persistStateToSupabase() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          Authorization: `Bearer ${getAdminApiSessionToken()}`,
         },
         body: JSON.stringify({ state: mapFrontendStateToBackend(state) }),
       });
@@ -1161,7 +1213,6 @@ async function persistStateToSupabase() {
     const payload = mapFrontendStateToBackend(state);
     const tableOperations = [
       ['settings', payload.settings ? [payload.settings] : []],
-      ['incognito_control', payload.incognito_control ? [payload.incognito_control] : []],
       ['employees', Array.isArray(payload.employees) ? payload.employees : payload.employees ? [payload.employees] : []],
       ['devices', Array.isArray(payload.devices) ? payload.devices : payload.devices ? [payload.devices] : []],
       ['replacements', Array.isArray(payload.replacements) ? payload.replacements : payload.replacements ? [payload.replacements] : []],
@@ -1277,7 +1328,7 @@ function loadState() {
   }
 }
 
-function saveState() {
+function saveState({ sync = true } = {}) {
   state.changelog = normalizeChangelogEntries(state.changelog);
   try {
     const sanitizedState = JSON.parse(JSON.stringify(state));
@@ -1286,6 +1337,10 @@ function saveState() {
     persistSharedTickets(state.tickets || []);
   } catch (error) {
     console.warn('Unable to save state to local storage.');
+  }
+
+  if (!sync) {
+    return Promise.resolve(false);
   }
 
   const canAttemptSecureSync = typeof window !== 'undefined'
@@ -1431,6 +1486,7 @@ async function loginUser(event) {
 
   const builtInAdmin = getBuiltInAdminAccount();
   if (enteredEmail.toLowerCase() === builtInAdmin.email && enteredPassword === builtInAdmin.password) {
+    await establishAdminApiSession(builtInAdmin.email, enteredPassword);
     const hasAdminUiAccess = true;
     setAuthenticated(true, {
       email: builtInAdmin.email,
@@ -1462,6 +1518,7 @@ async function loginUser(event) {
   const rawPasswordMatch = String(supabaseAccount.password_hash || '').trim() === String(enteredPassword || '').trim();
 
   if ((storedHash && storedHash === enteredHash.toLowerCase()) || rawPasswordMatch) {
+    await establishAdminApiSession(enteredEmail, enteredPassword);
     await hydrateEmployeePermissionsFromSupabase();
     const resolvedRole = await resolveSupabaseAuthRole(enteredEmail) || supabaseAccount.role || 'Employee';
     const hasAdminUiAccess = await currentSessionHasAdminAccessPermission();
@@ -1503,6 +1560,7 @@ function logoutUser() {
   setAuthenticated(false);
   try {
     sessionStorage.removeItem(CHANGELOG_SESSION_KEY);
+    sessionStorage.removeItem('mindlock-admin-api-session');
   } catch (error) {
     console.warn('Unable to clear changelog session preference.');
   }
@@ -2036,13 +2094,9 @@ function normalizeAccentColor(color) {
 }
 
 function saveGeneralSettings() {
-  const incognitoToggle = document.getElementById('settings-incognito-toggle');
   const adminEmailInput = document.getElementById('admin-email');
   const accentPicker = document.getElementById('accent-picker');
   const disposalRetentionDaysInput = document.getElementById('disposal-retention-days');
-
-  state.features = state.features || {};
-  state.features.incognitoBlocker = Boolean(incognitoToggle?.checked) && isChromeOrEdgeBrowser();
 
   state.settings = state.settings || {};
   if (adminEmailInput) {
@@ -3744,47 +3798,110 @@ function refreshLiveUsageData() {
   renderAnalyticsMbUsage();
 }
 
-function isChromeOrEdgeBrowser() {
-  const userAgent = navigator.userAgent || '';
-  const brands = navigator.userAgentData?.brands?.map((brand) => brand.brand).join(' ') || '';
-  const edgeMatch = /Edg\//i.test(userAgent) || /EdgA\//i.test(userAgent) || /Edg/i.test(brands);
-  const chromeMatch = /Chrome\//i.test(userAgent) || /CriOS\//i.test(userAgent) || /Chrome/i.test(brands);
-  return edgeMatch || chromeMatch;
-}
-
 function renderIncognitoStatus() {
   const toggle = document.getElementById('incognito-toggle');
-  const settingsToggle = document.getElementById('settings-incognito-toggle');
   const status = document.getElementById('incognito-status');
-  const supported = isChromeOrEdgeBrowser();
-  const enabled = supported && Boolean(state.features?.incognitoBlocker);
+  const count = document.getElementById('incognito-device-count');
+  const enabled = incognitoPolicySummary.enabled === null
+    ? Boolean(state.features?.incognitoBlocker)
+    : incognitoPolicySummary.enabled;
+  const currentRole = String(getCurrentUserRole()).trim().toLowerCase();
+  const canEdit = ['admin', 'administrator'].includes(currentRole)
+    && Boolean(getAdminApiSessionToken())
+    && incognitoPolicySummary.enabled !== null;
 
   if (toggle) {
-    toggle.disabled = !supported;
+    toggle.disabled = !canEdit;
     toggle.checked = enabled;
   }
 
-  if (settingsToggle) {
-    settingsToggle.disabled = !supported;
-    settingsToggle.checked = enabled;
+  if (count) {
+    count.textContent = Number.isInteger(incognitoPolicySummary.registeredDevices)
+      ? String(incognitoPolicySummary.registeredDevices)
+      : '—';
   }
 
   if (status) {
-    if (!supported) {
-      status.textContent = 'Chrome / Edge only';
-      status.classList.add('disabled');
-      status.classList.remove('enabled');
-    } else {
-      status.textContent = enabled
-        ? (incognitoControlSyncSucceeded === false
-          ? 'Enabled locally — not synced'
-          : incognitoControlSyncSucceeded === true
-            ? 'Enabled — closes tabs when extension access is allowed'
-            : 'Enabled — sync pending')
-        : 'Disabled';
-      status.classList.toggle('enabled', enabled);
-      status.classList.toggle('disabled', !enabled);
+    status.textContent = incognitoPolicySummary.enabled === null
+      ? 'Policy status unavailable'
+      : enabled
+        ? 'Enabled — applied by managed Windows agents when online'
+        : 'Disabled — agents restore prior policies on their next check';
+    status.classList.toggle('enabled', incognitoPolicySummary.enabled !== null && enabled);
+    status.classList.toggle('disabled', incognitoPolicySummary.enabled === false || incognitoPolicySummary.enabled === null);
+  }
+}
+
+async function loadIncognitoPolicySummary() {
+  try {
+    const response = await fetch(getManagementApiEndpoint('/api/incognito-policy'), {
+      headers: {
+        Authorization: `Bearer ${getAdminApiSessionToken()}`,
+      },
+      cache: 'no-store',
+    });
+    const payload = await response.json();
+    if (!response.ok) {
+      if (response.status === 401) clearAdminApiSession();
+      throw new Error(payload.error || `Policy request failed with status ${response.status}.`);
     }
+
+    incognitoPolicySummary = {
+      enabled: payload.isEnabled === true,
+      registeredDevices: Number.isInteger(payload.registeredDevices) ? payload.registeredDevices : 0,
+    };
+    state.features = state.features || {};
+    state.features.incognitoBlocker = incognitoPolicySummary.enabled;
+    saveState({ sync: false });
+  } catch (error) {
+    incognitoPolicySummary.enabled = null;
+    console.warn('Unable to load the authoritative Incognito policy.', error);
+  }
+  renderIncognitoStatus();
+}
+
+async function updateIncognitoPolicy(event) {
+  const toggle = event.currentTarget;
+  const requestedValue = Boolean(toggle.checked);
+  const token = getAdminApiSessionToken();
+  if (!token || !['admin', 'administrator'].includes(String(getCurrentUserRole()).trim().toLowerCase())) {
+    toggle.checked = incognitoPolicySummary.enabled === true;
+    renderIncognitoStatus();
+    showToast('error', 'Administrator sign-in required', 'Sign in with an authorized administrator account to change the global Incognito policy.');
+    return;
+  }
+
+  toggle.disabled = true;
+  try {
+    const response = await fetch(getManagementApiEndpoint('/api/incognito-policy'), {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ isEnabled: requestedValue }),
+    });
+    const payload = await response.json();
+    if (!response.ok) {
+      if (response.status === 401) clearAdminApiSession();
+      throw new Error(payload.error || `Policy update failed with status ${response.status}.`);
+    }
+
+    incognitoPolicySummary = {
+      enabled: payload.isEnabled === true,
+      registeredDevices: Number.isInteger(payload.registeredDevices) ? payload.registeredDevices : 0,
+    };
+    state.features = state.features || {};
+    state.features.incognitoBlocker = incognitoPolicySummary.enabled;
+    saveState({ sync: false });
+    showToast('success', 'Incognito policy updated', requestedValue
+      ? 'The global restriction will be applied by each managed Windows agent.'
+      : 'Managed agents will restore the browser policies they found before enforcement.');
+  } catch (error) {
+    toggle.checked = incognitoPolicySummary.enabled === true;
+    showToast('error', 'Incognito policy was not updated', error.message || 'The management service could not save the global policy.');
+  } finally {
+    renderIncognitoStatus();
   }
 }
 
@@ -5374,6 +5491,7 @@ window.addEventListener('DOMContentLoaded', () => {
 
     setAuthenticated(true);
     renderDashboard();
+    loadIncognitoPolicySummary();
     renderTicketSettings();
     bindTicketSettingsControls();
     initializeSettingsPage();
@@ -5762,28 +5880,7 @@ window.addEventListener('DOMContentLoaded', () => {
   if (laptopStatusFilter) laptopStatusFilter.addEventListener('change', renderLaptops);
 
   const incognitoToggle = document.getElementById('incognito-toggle');
-  const settingsIncognitoToggle = document.getElementById('settings-incognito-toggle');
-
-  [incognitoToggle, settingsIncognitoToggle].forEach((toggle) => {
-    if (!toggle) return;
-    toggle.addEventListener('change', () => {
-      if (!isChromeOrEdgeBrowser()) {
-        toggle.checked = false;
-        renderIncognitoStatus();
-        return;
-      }
-
-      state.features = state.features || {};
-      state.features.incognitoBlocker = toggle.checked;
-      saveState().then((synced) => {
-        incognitoControlSyncSucceeded = synced;
-        renderIncognitoStatus();
-        if (!synced) {
-          showToast('error', 'Incognito policy not synced', 'The setting was saved locally, but the extension has not received it. Configure the secure sync backend and database policies.');
-        }
-      });
-    });
-  });
+  if (incognitoToggle) incognitoToggle.addEventListener('change', updateIncognitoPolicy);
 
   const adminEmailInput = document.getElementById('admin-email');
   if (adminEmailInput) {

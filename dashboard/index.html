@@ -81,13 +81,14 @@
               <div class="feature-row">
                 <div>
                   <h3>Incognito blocker</h3>
-                  <p>When enabled, new Incognito tabs are closed as they open. The extension must be allowed in Incognito and connected to the admin policy.</p>
+                  <p>Applies Chrome Incognito and Edge InPrivate restrictions to every registered, managed Windows laptop.</p>
                 </div>
                 <label class="switch" aria-label="Enable or disable Incognito blocker">
                   <input id="incognito-toggle" type="checkbox" checked />
                   <span class="slider"></span>
                 </label>
               </div>
+              <p class="incognito-coverage"><strong id="incognito-device-count">0</strong> registered laptops covered</p>
               <div id="incognito-status" class="feature-status enabled">Enabled</div>
             </div>
           </section>
@@ -614,17 +615,6 @@
 
               <div class="settings-panel active" data-settings-panel="general">
                 <div class="settings-list">
-                  <div class="setting-item">
-                    <div>
-                      <h3>Incognito blocker</h3>
-                      <p>Closes Incognito tabs when enabled. The extension must be allowed in Incognito and connected to the admin policy.</p>
-                    </div>
-                    <label class="switch" aria-label="Toggle Incognito blocker">
-                      <input id="settings-incognito-toggle" type="checkbox" checked />
-                      <span class="slider"></span>
-                    </label>
-                  </div>
-
                   <div class="setting-item">
                     <div>
                       <h3>IT Manager email</h3>

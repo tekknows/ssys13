@@ -1,45 +1,39 @@
-# Administrator guide for Incognito restrictions and deployment
+# Administrator guide for Incognito blocking
 
-## Incognito restriction status
+## Global Incognito setting
 
-A normal browser extension cannot disable Incognito mode on all platforms or all browser builds. The implementation therefore documents the supported enterprise-managed approach and clearly reports the restriction status only when it can be verified.
+Use the single **Incognito blocker** toggle in the dashboard's existing Incognito blocker panel. It applies to all registered, assigned laptops that have a provisioned Windows management agent. The registered-laptop count is informational; there are no per-laptop policy toggles or sync-status badges.
 
-### Supported option: managed Chrome policy
+Only an active administrator can change the setting. The backend stores the authoritative global value in `system_policies` under `incognito_blocking`; it also updates the legacy `incognito_control` record for compatibility with the extension's existing Incognito-tab handling.
 
-When the browser is managed by enterprise policy, Chrome administrators can configure `IncognitoModeAvailability` to restrict Incognito mode. A common pattern is to set the policy value to `Disabled` or a managed equivalent in a Chrome policy template.
+## Windows enforcement
 
-Example policy payload:
+The browser extension cannot write Windows policy. The elevated MINDLOCK agent applies these machine policies:
 
-```json
-{
-  "IncognitoModeAvailability": "Disabled"
-}
+- Chrome: `HKLM\SOFTWARE\Policies\Google\Chrome\IncognitoModeAvailability`
+- Edge: `HKLM\SOFTWARE\Policies\Microsoft\Edge\InPrivateModeAvailability`
+
+Value `1` disables Incognito/InPrivate; value `0` allows it. On disable, the agent restores prior values only when the current value still matches the value MINDLOCK applied. This leaves unrelated policy values untouched. Existing browsers may need a restart to refresh policy.
+
+The agent polls the backend after startup and periodically while connected. An offline device keeps its last applied registry state and retrieves the latest global value when it reconnects. A newly registered laptop is covered after it is assigned, provisioned with a per-device token, and the agent first connects.
+
+## Verification
+
+On an elevated Windows terminal, inspect the applied values:
+
+```powershell
+Get-ItemProperty 'HKLM:\SOFTWARE\Policies\Google\Chrome' -Name IncognitoModeAvailability
+Get-ItemProperty 'HKLM:\SOFTWARE\Policies\Microsoft\Edge' -Name InPrivateModeAvailability
+Get-ScheduledTask -TaskName 'Mindlock Browser Policy Agent'
+Get-Content "$env:ProgramData\Mindlock\agent.log" -Tail 30
 ```
 
-This method requires browser or OS-level administrator control. If the browser is unmanaged, the extension cannot reliably enforce this behavior.
+When enabled, both registry values should be `1`; when disabled, they should match the pre-MINDLOCK values (or be absent if no value existed). Normal browsing remains available. Verify by restarting Chrome/Edge and checking the browser's policy page (`chrome://policy` or `edge://policy`).
 
-### Verification
+## Agent security
 
-The extension can detect the configured restriction only when the browser exposes a supported enterprise status or config signal. If the browser does not provide a reliable signal, the dashboard should show `'unknown'` or `'not verifiable'` instead of claiming the browser is unrestricted.
-
-### Administrator note
-
-This is a policy-level setting, not a capability of a regular extension. The extension should never claim it disables Incognito mode on a single unmanaged machine.
-
-## Developer mode and Chrome controls
-
-The Chrome Reload button and the Developer mode controls belong to the Chrome extension management interface. They are not part of the extension and cannot be hidden by a normal extension. For routine use, administrators should turn off Developer mode when the browser is used outside a testing environment.
-
-## Deployment and force-install
-
-For managed environments, administrators can:
-
-- use Chrome Enterprise policies to force-install the extension,
-- prevent standard users from removing the extension,
-- keep the policy and package version controlled centrally.
-
-This is not the same as hiding developer controls. It is a real management mechanism but depends on enterprise controls and the managed browser environment.
-
-## Important limitation
-
-The extension is not tamper-proof on unmanaged computers. The code avoids false claims and documents the boundary between supportable enforcement and local-user control.
+- Provision a separate random token for each registered device with `node backend/provision-agent.js <device-row-id>`.
+- Store only the token hash in Supabase; the one-time plaintext token is entered during the elevated agent installation.
+- The agent config is restricted to SYSTEM and local Administrators. Reprovisioning rotates the token and invalidates the previous one.
+- Keep the API on HTTPS and the Supabase service-role key on the backend only.
+- An unmanaged user with local administrator rights can change registry settings or remove the task; use enterprise device management to harden company laptops.

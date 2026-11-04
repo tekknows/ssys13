@@ -23,22 +23,21 @@ The current project is not a React or Vite app. It is a static browser dashboard
 - blocking_policies
 - usage_events
 
-The repository includes idempotent schema scripts, but no live Supabase project is configured in this workspace.
+This checkout does not contain the legacy base-schema or seed files, and no live Supabase project is available to inspect. Apply the organization's existing MINDLOCK schema and RLS scripts first.
 
 ## 2) Create a new Supabase project
 
-1. Open your Supabase project.
-2. In the SQL editor, run the contents of [supabase/schema.sql](../supabase/schema.sql).
-3. Run [supabase/employee-role-migration.sql](../supabase/employee-role-migration.sql) to normalize existing employee names and role categories. Run it after the schema on both new and existing projects.
-4. Run the contents of [supabase/rls.sql](../supabase/rls.sql).
-5. Run [supabase/admin-seed.sql](../supabase/admin-seed.sql) to insert or update the default administrator in `employees`, `user_credentials`, and `admin_access_assignments`. This SQL script has not been applied to any live project from this workspace.
-6. Confirm each employee has the expected email and role, and that the matching password hash exists in `user_credentials`.
+1. Open the existing MINDLOCK Supabase project.
+2. Confirm its existing base schema, RLS configuration, and administrator accounts are set up.
+3. Confirm that `devices`, `incognito_control`, `employees`, `user_credentials`, and `employee_permissions` exist.
+4. Run [`supabase/migrations/20261104172000_incognito_blocking.sql`](../supabase/migrations/20261104172000_incognito_blocking.sql) in the SQL editor.
+5. Confirm each administrator has an active account and role in `employees` and an active credential in `user_credentials`.
 
 The employee form stores the full name in `employees.name` and leaves the legacy `surname` column blank. The visible role `Admin` is stored as the canonical `Administrator` value in `account_role` so existing authorization policies remain compatible; the employee `role` column is constrained to `Admin`, `Employee`, or `IT Staff`.
 
-The admin Incognito blocker setting is published through the read-only `incognito_control` table. The dashboard's secure sync backend must be configured and protected for admin changes to reach extensions. The extension also needs the browser's **Allow in Incognito** permission; without it, Chrome/Edge will not let the extension close Incognito tabs.
+The existing Incognito blocker retains a compatibility value in `incognito_control`. For centralized Windows enforcement, also run [`supabase/migrations/20261104172000_incognito_blocking.sql`](../supabase/migrations/20261104172000_incognito_blocking.sql) after the existing schema and RLS scripts. It creates `system_policies` and `device_agent_credentials` with RLS enabled and no client-access policies; only the backend service role can access them. It seeds the global row from `incognito_control` and adds a service-role-only RPC that updates both policy records atomically.
 
-The default login provisioned by that script is `admin@sys13.com` with password `admin123`; change it immediately after setup. This project uses its custom `user_credentials` table, so the script does not create an account in Supabase `auth.users`.
+The existing dashboard uses its custom `user_credentials` table and does not create Supabase Auth users. The management API validates credentials and administrator roles against the existing tables before issuing its short-lived session.
 
 ## Database-backed issue categories
 
@@ -54,19 +53,19 @@ The schema also includes `changelog` for update-log entries and fields for the t
 
 ## 3) Add the required environment variables
 
-Create a local `.env` file (or use your deployment environment) and set:
+Set these values in the backend process environment:
 
 ```bash
 SUPABASE_URL=https://your-project.supabase.co
-SUPABASE_PUBLISHABLE_KEY=your_publishable_key
-VITE_SUPABASE_URL=https://your-project.supabase.co
-VITE_SUPABASE_PUBLISHABLE_KEY=your_publishable_key
 SUPABASE_SERVICE_ROLE_KEY=server_only_service_role_key
+ADMIN_SESSION_SECRET=a_random_secret_at_least_32_characters
+ALLOWED_ORIGINS=https://admin.example.com
 ```
 
-Keep `SUPABASE_SERVICE_ROLE_KEY` in the backend process environment only; never put it in browser code or extension storage. Start the API with `npm run start:backend` and configure the dashboard's `apiBaseUrl` to reach `/api/supabase-sync` (or proxy that path to the API). The category snapshot is written through this service-role backend.
+Keep `SUPABASE_SERVICE_ROLE_KEY` and `ADMIN_SESSION_SECRET` in the backend process environment only; never put them in browser code or extension storage. Set `ALLOWED_ORIGINS` to the exact dashboard origin(s). Start the API with `npm run start:backend` and configure the dashboard's `apiBaseUrl` to reach `/api/supabase-sync` (or proxy that path to the API). The API validates custom dashboard credentials against `user_credentials` and the administrator role against `employees`, issues a short-lived HMAC-signed admin session, and rechecks active administrator status for protected policy and sync operations. Deploy the API behind HTTPS and rate limiting.
 
-The sync API uses the service-role key and must be placed behind an authenticated reverse proxy or private network before public deployment. The dashboard's custom browser login is not API authentication.
+The dashboard's local browser login alone is not API authentication. Only the server-issued signed session can authorize privileged writes.
+The static dashboard reads runtime values from `window.__APP_CONFIG__` before `dashboard/config.js` loads, or from the existing `localStorage` entries `supabaseUrl`, `supabaseAnonKey`, and `apiBaseUrl`. It does not read a backend `.env` file.
 
 ## 4) Configure the extension
 
@@ -85,16 +84,17 @@ After running the SQL in Supabase, confirm that:
 
 - the tables exist in the database explorer
 - RLS is enabled on the protected tables
-- the default admin record exists in `employees` with the expected email and role
-- the matching password hash is present in `user_credentials`
-- a root admin can read all tables
+- authorized administrator records exist in `employees` with the expected roles
+- matching active credentials exist in `user_credentials`
+- the administrator dashboard can read and update the global policy through its authenticated backend API
 - IT staff can read supported records but not elevate permissions
 - employees can access only their own tickets and records
 - blocked domains are written to `blocking_policies`
 - usage rows are inserted into `usage_events`
+- `system_policies` and `device_agent_credentials` have RLS enabled and no anon/authenticated access policies
 
 ## 6) Important security note
 
 The project intentionally uses browser-side configuration and custom credential checks stored in `user_credentials`. It validates the email and password hash directly in the app, which keeps the login flow password-based rather than Supabase-Auth-based.
 
-The SQL above creates a secure baseline for the database, while the app itself continues to authenticate users through the custom credential table and role checks.
+The migration protects the new global policy and agent credentials from direct client access. The API continues to validate users through the existing custom credential table and administrator role records.

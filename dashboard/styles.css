@@ -1640,6 +1640,16 @@ body[data-theme='dark'] .segmented-button.active {
   color: var(--muted);
 }
 
+.incognito-coverage {
+  margin: 0 0 4px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.incognito-coverage strong {
+  color: var(--text);
+}
+
 .feature-status {
   display: inline-flex;
   margin-top: 6px;
