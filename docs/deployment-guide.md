@@ -5,16 +5,25 @@
 1. Back up the existing MINDLOCK Supabase project and inspect any existing tables with the same names.
 2. Run [`supabase/migrations/20261104160000_system_backend.sql`](../supabase/migrations/20261104160000_system_backend.sql), [`supabase/migrations/20261104172000_incognito_blocking.sql`](../supabase/migrations/20261104172000_incognito_blocking.sql), and [`supabase/migrations/20261106120000_changelog_retention.sql`](../supabase/migrations/20261106120000_changelog_retention.sql), in the Supabase SQL editor.
 3. Configure `SUPABASE_URL`, `SUPABASE_SECRET_KEY`, a unique `ADMIN_SESSION_SECRET` (at least 32 characters), and exact dashboard/extension origins in `ALLOWED_ORIGINS` in the backend environment. Keep the Supabase secret key and signing secret on the backend only.
-4. Start the management API in one terminal:
+4. Start the management API in a PowerShell terminal:
 
    ```powershell
-   npm run start:backend
+   Set-Location D:\ssys13
+   & 'C:\Program Files\nodejs\node.exe' backend/server.js
    ```
 
-   Keep this terminal open. Confirm it prints `Secure Supabase sync backend
-   running on port 3000`. If login reports a Supabase connection error, check
-   the backend terminal and verify that `SUPABASE_URL` in the backend
-   environment or `.env.local` is the active project's URL and resolves in DNS.
+   Keep this terminal open. In a second PowerShell terminal, verify the API:
+
+   ```powershell
+   Invoke-RestMethod http://localhost:3000/health
+   ```
+
+   The response should show `status: ok`. If the browser reports a 404, make
+   sure this API process is running and that the dashboard API URL is
+   `http://localhost:3000/api/supabase-sync`. If login reports a Supabase
+   connection error, check the backend terminal and verify that `SUPABASE_URL`
+   in the backend environment or `.env.local` is the active project's URL and
+   resolves in DNS.
 5. Serve the dashboard locally in a separate terminal:
 
    ```bash

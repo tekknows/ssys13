@@ -30,19 +30,20 @@ dashboard and management API.
 
 ## 2. Deploy the management API
 
-The repository's API is a long-running Node.js server started with
+The repository's API is a Node.js server started locally with
 `npm run start:backend`. It implements administrator sessions, global policy
-read/write, Windows agent policy checks, and dashboard state sync. There are no
-Vercel serverless API route files in the current project.
+read/write, Windows agent policy checks, and dashboard state sync. The adapter
+at [`api/[...path].js`](../api/[...path].js) exposes these existing backend
+routes as a Vercel Node.js Function.
 
 Choose one of these approaches:
 
-- **Recommended for the current code:** deploy the Node.js backend to a host
-  that supports a persistent Node.js web service. Configure HTTPS and keep the
-  service running. Its public URL will be the management API origin.
-- **Vercel-only deployment:** first adapt the API routes to Vercel Functions
-  and verify that all required endpoints and agent polling work there. This is
-  additional application work; environment variables alone are not sufficient.
+- **Vercel deployment:** use the included adapter and configure all backend
+  environment variables in the Vercel project. Ensure Vercel's project Root
+  Directory is the repository root so it deploys `api/[...path].js`.
+- **Separate backend host:** deploy the Node.js backend to a host that supports
+  a persistent Node.js web service. Configure HTTPS and keep the service
+  running. Its public URL will be the management API origin.
 
 Do not point the dashboard at `localhost` in production. The API URL must be
 reachable over HTTPS from the deployed dashboard and managed laptops.
@@ -56,7 +57,7 @@ In the hosting provider's environment settings for the **management API**, add:
 | `SUPABASE_URL` | The project URL from Supabase **Project Settings → API** |
 | `SUPABASE_SECRET_KEY` | The server-side secret key for this project |
 | `ADMIN_SESSION_SECRET` | A unique random secret of at least 32 characters |
-| `ALLOWED_ORIGINS` | Exact comma-separated dashboard and extension origins, for example `https://your-dashboard.vercel.app,chrome-extension://your-extension-id` |
+| `ALLOWED_ORIGINS` | Exact comma-separated dashboard and extension origins; include `https://ssys13.vercel.app` and any custom dashboard origin |
 | `PORT` | Set only if required by the backend host |
 
 Use the secret key only on the backend. Never put it in Vercel variables exposed
@@ -95,8 +96,11 @@ value in a script that runs before `config.js` in
 
 Replace the example with the real HTTPS URL of the deployed backend. Keep the
 configuration before the existing `config.js` script tag, then redeploy the
-dashboard to Vercel. Do not add a Supabase secret key here. The same endpoint is
-used for authenticated dashboard reads (`GET`) and saves (`POST`).
+dashboard to Vercel. The shared dashboard configuration currently defaults to
+`https://ssys13.vercel.app/api/supabase-sync`; the login page derives its
+`/api/admin/session` request from this API base URL. Do not add a Supabase secret
+key here. The same endpoint is used for authenticated dashboard reads (`GET`)
+and saves (`POST`).
 
 For a one-browser test only, you can instead open the deployed dashboard,
 open the browser developer console, and run:
@@ -114,16 +118,21 @@ other administrators and browsers will not inherit it.
 
 ## 5. Configure and redeploy Vercel
 
-1. In Vercel, open the dashboard project and check that its **Root Directory**
-   and build/output settings match the existing static dashboard deployment.
+1. In Vercel, set the project **Root Directory** to the repository root so the
+   `api/` serverless function is included. Keep `dashboard` as the static output
+   directory if that matches the current deployment.
 2. If the dashboard is served at a custom domain, use that exact HTTPS origin
    in the backend's `ALLOWED_ORIGINS`, including the scheme and any non-default
-   port.
+   port. For this deployment, include `https://ssys13.vercel.app`; otherwise
+   the backend rejects browser requests.
 3. Commit and push the dashboard API URL configuration from Step 4, or deploy
    the equivalent runtime configuration through your existing build process.
 4. Redeploy the Vercel project.
-5. In browser developer tools, check the dashboard's Network panel and confirm
-   requests go to the deployed HTTPS management API, not `localhost`.
+5. In the Vercel deployment, confirm
+   `https://ssys13.vercel.app/api/health` returns
+   `{"ok":true,"status":"ok"}`. Then check the dashboard's Network panel and
+   confirm API requests go to `https://ssys13.vercel.app/api/...`, not
+   `localhost`.
 
 Vercel environment variables are available to build or server code according to
 the framework and deployment configuration. They are **not automatically

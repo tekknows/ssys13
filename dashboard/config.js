@@ -2,6 +2,7 @@ window.__APP_CONFIG__ = window.__APP_CONFIG__ || {};
 
 const DEFAULT_SUPABASE_URL = 'https://owuottmockghwcysnfig.supabase.co';
 const DEFAULT_SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_dLvhzyFjokO9E6BnMsvblg_MmLaNNaR';
+const DEFAULT_API_BASE_URL = 'https://ssys13.vercel.app/api/supabase-sync';
 const PREVIOUS_SUPABASE_URL = 'https://uwjsmxvdsdozzimukael.supabase.co';
 const PREVIOUS_SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_BU7kYL8KZuFAa06SglHykw_6U1044Ud';
 const envUrl = String(window.__APP_CONFIG__.supabaseUrl || '').trim();
@@ -39,12 +40,18 @@ const resolvedPublishableKey = envAnonKey || (storedAnonKey && storedAnonKey !==
 
 window.__APP_CONFIG__.supabaseUrl = resolvedUrl;
 window.__APP_CONFIG__.supabaseAnonKey = resolvedPublishableKey;
-window.__APP_CONFIG__.apiBaseUrl = envApiBaseUrl || storedApiBaseUrl || 'http://localhost:3000/api/supabase-sync';
+window.__APP_CONFIG__.apiBaseUrl = envApiBaseUrl
+  || (storedApiBaseUrl && storedApiBaseUrl !== 'http://localhost:3000/api/supabase-sync'
+    ? storedApiBaseUrl
+    : DEFAULT_API_BASE_URL);
 window.__APP_CONFIG__.serverSyncUrl = window.__APP_CONFIG__.apiBaseUrl;
 
 try {
   if (storedUrl === PREVIOUS_SUPABASE_URL) localStorage.setItem('supabaseUrl', DEFAULT_SUPABASE_URL);
   if (storedAnonKey === PREVIOUS_SUPABASE_PUBLISHABLE_KEY) localStorage.setItem('supabaseAnonKey', DEFAULT_SUPABASE_PUBLISHABLE_KEY);
+  if (storedApiBaseUrl === 'http://localhost:3000/api/supabase-sync') {
+    localStorage.setItem('apiBaseUrl', DEFAULT_API_BASE_URL);
+  }
 } catch (error) {
   console.warn('Unable to migrate saved Supabase browser configuration.', error);
 }
