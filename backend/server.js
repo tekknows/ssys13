@@ -351,11 +351,24 @@ function applyCorsHeaders(req, res) {
   const origin = String(req.headers.origin || '');
   if (!origin) return true;
 
+  const forwardedHost = String(req.headers['x-forwarded-host'] || '').split(',')[0].trim();
+  const requestHost = forwardedHost || String(req.headers.host || '').trim();
+  const forwardedProtocol = String(req.headers['x-forwarded-proto'] || '').split(',')[0].trim();
+  const requestProtocol = forwardedProtocol || (req.socket.encrypted ? 'https' : 'http');
+  let isSameOrigin = false;
+  if (requestHost) {
+    try {
+      isSameOrigin = new URL(origin).origin === new URL(`${requestProtocol}://${requestHost}`).origin;
+    } catch (error) {
+      isSameOrigin = false;
+    }
+  }
+
   const allowedOrigins = String(process.env.ALLOWED_ORIGINS || '')
     .split(',')
     .map((value) => value.trim())
     .filter(Boolean);
-  if (!allowedOrigins.includes(origin)) {
+  if (!isSameOrigin && !allowedOrigins.includes(origin)) {
     sendJson(res, 403, { ok: false, error: 'This dashboard origin is not allowed.' });
     return false;
   }

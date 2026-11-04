@@ -27,13 +27,44 @@ test('Vercel API adapter routes health and administrator session requests to the
 
   const response = await fetch(`http://127.0.0.1:${address.port}/api/admin/session`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      Origin: `http://127.0.0.1:${address.port}`,
+    },
     body: '{}',
   });
 
   assert.equal(response.status, 401);
+  assert.equal(response.headers.get('access-control-allow-origin'), `http://127.0.0.1:${address.port}`);
   assert.deepEqual(await response.json(), {
     ok: false,
     error: 'Invalid administrator credentials.',
+  });
+});
+
+test('Vercel API rejects unlisted cross-origin requests', async (context) => {
+  const server = http.createServer(handleAdminSessionRequest);
+  await new Promise((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', resolve);
+  });
+  context.after(() => new Promise((resolve, reject) => {
+    server.close((error) => error ? reject(error) : resolve());
+  }));
+
+  const address = server.address();
+  const response = await fetch(`http://127.0.0.1:${address.port}/api/admin/session`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Origin: 'https://untrusted.example',
+    },
+    body: '{}',
+  });
+
+  assert.equal(response.status, 403);
+  assert.deepEqual(await response.json(), {
+    ok: false,
+    error: 'This dashboard origin is not allowed.',
   });
 });

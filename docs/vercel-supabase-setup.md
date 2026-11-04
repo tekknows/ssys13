@@ -64,7 +64,7 @@ In the hosting provider's environment settings for the **management API**, add:
 | `SUPABASE_URL` | The project URL from Supabase **Project Settings → API** |
 | `SUPABASE_SECRET_KEY` | The server-side secret key for this project |
 | `ADMIN_SESSION_SECRET` | A unique random secret of at least 32 characters |
-| `ALLOWED_ORIGINS` | Exact comma-separated dashboard and extension origins; include `https://ssys13.vercel.app` and any custom dashboard origin |
+| `ALLOWED_ORIGINS` | Exact comma-separated origins for cross-origin dashboard/extension clients, e.g. `https://ssys13.vercel.app,chrome-extension://your-extension-id`; same-origin dashboard requests are accepted automatically |
 | `PORT` | Set only if required by the backend host |
 
 Use the secret key only on the backend. Never put it in Vercel variables exposed
@@ -131,8 +131,8 @@ other administrators and browsers will not inherit it.
    `vercel.json` sets the static output directory to `dashboard`.
 2. If the dashboard is served at a custom domain, use that exact HTTPS origin
    in the backend's `ALLOWED_ORIGINS`, including the scheme and any non-default
-   port. For this deployment, include `https://ssys13.vercel.app`; otherwise
-   the backend rejects browser requests.
+   port. Same-origin requests to the Vercel-hosted dashboard and API are allowed
+   automatically; include other dashboard or extension origins in this variable.
 3. Commit and push the dashboard API URL configuration from Step 4, or deploy
    the equivalent runtime configuration through your existing build process.
 4. Redeploy the Vercel project so the API functions and the `/dashboard/...`
