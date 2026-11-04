@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Managed Site Guard Admin Login</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body data-theme="light">
+    <div id="toast-container" class="toast-container" aria-live="polite" aria-atomic="true"></div>
+
+    <div id="login-screen" class="login-screen" aria-live="polite">
+      <button id="login-theme-toggle" class="icon-button login-theme-toggle" type="button" aria-label="Switch to dark mode">
+        <span class="theme-icon">🌙</span>
+      </button>
+      <div class="login-card">
+        <div class="login-brand">
+          <div class="brand-mark">S</div>
+          <div>
+            <p class="eyebrow">Secure access</p>
+            <h2>Sys13 Admin</h2>
+          </div>
+        </div>
+
+        <form id="login-form" class="login-form">
+          <label>
+            Email or username
+            <input id="login-email" type="text" value="" placeholder="name@company.com" required />
+          </label>
+
+          <label>
+            Password
+            <div class="password-input-wrap">
+              <input id="login-password" type="password" value="" placeholder="Enter password" required />
+              <button id="toggle-password" class="password-toggle" type="button" aria-label="Show password" aria-pressed="false" data-visible="false">
+                <svg class="password-icon eye-open" viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M1.5 12S5.1 5.25 12 5.25 22.5 12 22.5 12 18.9 18.75 12 18.75 1.5 12 1.5 12Z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+                  <circle cx="12" cy="12" r="3.3" fill="none" stroke="currentColor" stroke-width="1.6"/>
+                </svg>
+                <svg class="password-icon eye-closed" viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M2.5 2.5L21.5 21.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+                  <path d="M10.2 10.2A3.2 3.2 0 0 0 13.8 13.8" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+                  <path d="M8.7 6.6A12.6 12.6 0 0 1 12 6.1c6.9 0 10.5 5.9 10.5 5.9a19.1 19.1 0 0 1-4.4 5.1M6.2 7.7A18.2 18.2 0 0 0 1.5 12s3.6 6.1 10.5 6.1c1.7 0 3.2-.3 4.5-.8" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+              </button>
+            </div>
+          </label>
+
+          <div id="login-error" class="login-error" role="alert"></div>
+          <button type="submit" class="primary-button full-width">Sign in</button>
+        </form>
+      </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="config.js"></script>
+    <script src="app.js"></script>
+  </body>
+</html>

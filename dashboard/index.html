@@ -1,0 +1,1593 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Managed Site Guard Admin</title>
+    <link rel="stylesheet" href="styles.css" />
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="config.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  </head>
+  <body data-theme="light">
+    <div id="toast-container" class="toast-container" aria-live="polite" aria-atomic="true"></div>
+
+    <div class="app-shell">
+      <aside class="sidebar">
+        <button id="sidebar-toggle" class="sidebar-toggle" type="button" aria-label="Toggle sidebar">❮</button>
+
+        <div class="brand-block">
+          <div class="brand-mark">S</div>
+          <div class="brand-copy">
+            <p class="eyebrow">Control panel</p>
+            <h2>Sys13 Admin</h2>
+          </div>
+        </div>
+
+        <nav class="sidebar-nav" aria-label="Main navigation">
+          <button class="nav-link active" data-section="dashboard-section">Dashboard</button>
+          <button class="nav-link" data-section="block-section">Website Blocking</button>
+          <button class="nav-link" data-section="analytics-section">Analytics</button>
+          <button class="nav-link" data-section="register-section">Register Devices</button>
+          <button class="nav-link" data-section="laptops-section">Laptops</button>
+          <button class="nav-link" data-section="tickets-section">Tickets</button>
+          <button class="nav-link" data-section="employee-section">Employees</button>
+          <button class="nav-link" data-section="replacement-section">Laptop Change</button>
+          <button class="nav-link" data-section="settings-section">Settings</button>
+          <button class="nav-link" data-section="ticket-settings-section">Ticket Settings</button>
+          <a class="external-nav-link" href="../extension/options.html" target="_blank" rel="noopener noreferrer">Extension Options</a>
+        </nav>
+        <div class="sidebar-version" aria-label="Application version">
+          <span>Version</span>
+          <strong id="sidebar-version">v1.5.1</strong>
+        </div>
+      </aside>
+
+      <div class="main-panel">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow">Centralized management</p>
+            <h1>Website Control Dashboard</h1>
+          </div>
+
+          <div class="topbar-actions">
+            <button id="theme-toggle" class="icon-button" type="button" aria-label="Toggle dark mode">
+              <span class="theme-icon">☀️</span>
+            </button>
+            <button id="sync-button" class="primary-button" type="button">Sync </button>
+            <button id="logout-button" class="secondary-button" type="button">Log out</button>
+          </div>
+        </header>
+
+        <main class="content-shell">
+          <section id="dashboard-section" class="content-section active">
+            <div class="summary-grid" id="summary-grid"></div>
+
+            <div class="dashboard-attention-panel panel">
+              <div class="panel-header dashboard-attention-header">
+                <div>
+                  <h2>Needs attention</h2>
+                  <p id="dashboard-attention-count" class="dashboard-attention-count"></p>
+                </div>
+              </div>
+              <div id="dashboard-attention-list" class="dashboard-attention-list" aria-live="polite"></div>
+            </div>
+
+            <div class="feature-panel panel">
+              <div class="panel-header">
+                <h2>Security features</h2>
+              </div>
+
+              <div class="feature-row">
+                <div>
+                  <h3>Incognito blocker</h3>
+                  <p>When enabled, new Incognito tabs are closed as they open. The extension must be allowed in Incognito and connected to the admin policy.</p>
+                </div>
+                <label class="switch" aria-label="Enable or disable Incognito blocker">
+                  <input id="incognito-toggle" type="checkbox" checked />
+                  <span class="slider"></span>
+                </label>
+              </div>
+              <div id="incognito-status" class="feature-status enabled">Enabled</div>
+            </div>
+          </section>
+
+          <section id="block-section" class="content-section">
+            <div class="website-blocking-shell">
+              <div class="website-blocking-header">
+                <div class="website-blocking-title-wrap">
+                 
+                  <div>
+                    <h2>Website Blocking</h2>
+                    <p>Manage website rules and scheduled access restrictions.</p>
+                  </div>
+                </div>
+              </div>
+
+              <div class="website-rules-form-card">
+                <h3>Add Website Rule</h3>
+
+                <form id="blocklist-form" class="block-rule-form">
+                  <div class="form-grid">
+                    <div class="field-block">
+                      <label for="block-domain">Domain <span>*</span></label>
+                      <div class="input-with-icon">
+                        <span class="field-icon">@</span>
+                        <input id="block-domain" type="text" placeholder="e.g. youtube.com" required />
+                      </div>
+                    </div>
+
+                    <div class="field-block">
+                      <label for="block-scope">Scope <span>*</span></label>
+                      <div class="select-wrap">
+                        <select id="block-scope">
+                          <option value="all">All users</option>
+                          <option value="specific">Specific users</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <div class="field-block">
+                      <label for="block-category">Category <span>*</span></label>
+                      <div class="select-wrap">
+                        <select id="block-category">
+                          <option value="social">Social media</option>
+                          <option value="entertainment">Entertainment</option>
+                          <option value="gaming">Gaming</option>
+                          <option value="custom">Custom</option>
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="schedule-card">
+                    <div class="schedule-type-group">
+                      <label class="schedule-option">
+                        <input type="radio" name="schedule-type" value="weekly" />
+                        <span>Recurring weekly</span>
+                      </label>
+                      <label class="schedule-option selected">
+                        <input type="radio" name="schedule-type" value="daily" checked />
+                        <span>Daily hours only</span>
+                      </label>
+                    </div>
+
+                    <div id="schedule-weekly-row" class="schedule-weekly-row hidden">
+                      <label class="schedule-repeat-label">Repeat on</label>
+                      <div class="day-picker" role="group" aria-label="Repeat days">
+                        <button type="button" class="day-pill" data-day="Mon">Mon</button>
+                        <button type="button" class="day-pill" data-day="Tue">Tue</button>
+                        <button type="button" class="day-pill" data-day="Wed">Wed</button>
+                        <button type="button" class="day-pill" data-day="Thu">Thu</button>
+                        <button type="button" class="day-pill" data-day="Fri">Fri</button>
+                        <button type="button" class="day-pill" data-day="Sat">Sat</button>
+                        <button type="button" class="day-pill" data-day="Sun">Sun</button>
+                      </div>
+                    </div>
+
+                    <div class="schedule-times">
+                      <label>
+                        <span>Start time</span>
+                        <input id="schedule-start-time" type="time" value="08:00" />
+                      </label>
+                      <label>
+                        <span>End time</span>
+                        <input id="schedule-end-time" type="time" value="17:00" />
+                      </label>
+                    </div>
+                  </div>
+
+                  <div id="block-target-wrap" class="field-block block-target-block">
+                    <label for="block-user-target">Apply to employees</label>
+                    <div class="select-wrap multi-select-wrap">
+                      <select id="block-user-target" multiple size="6" aria-label="Select employees for this blocking rule"></select>
+                    </div>
+                  </div>
+
+                  <div class="form-footer">
+                    <div class="schedule-help">Applies during selected hours.</div>
+                    <button type="submit" class="primary-button add-rule-button">+ Add Website Rule</button>
+                  </div>
+                </form>
+              </div>
+
+              <div class="website-rules-table-panel">
+                <div class="rules-panel-header">
+                  <h3>Website Rules</h3>
+                  <div class="rules-toolbar">
+                    <div class="search-wrap">
+                      <input id="policy-search" type="search" placeholder="Search domain..." aria-label="Search blocking rules" />
+                    </div>
+                    <div class="segmented-control" role="tablist" aria-label="Policy status filter">
+                      <button type="button" class="segmented-button active" data-policy-filter="active" aria-pressed="true">Active</button>
+                      <button type="button" class="segmented-button" data-policy-filter="inactive" aria-pressed="false">Inactive</button>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="table-responsive">
+                  <table class="website-rules-table">
+                    <thead>
+                      <tr>
+                        <th>Domain</th>
+                        <th>Scope</th>
+                        <th>Applies To</th>
+                        <th>Category</th>
+                        <th>Status</th>
+                        <th>Schedule</th>
+                        <th>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody id="policy-table"></tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section id="analytics-section" class="content-section">
+            <div class="panel analytics-panel">
+              <div class="analytics-tabs" role="tablist" aria-label="Analytics sections">
+                <button class="analytics-tab active" type="button" data-analytics-tab="overview" role="tab" aria-selected="true">Overview</button>
+                <button class="analytics-tab" type="button" data-analytics-tab="mb-usage" role="tab" aria-selected="false">MB Usage</button>
+                <button class="analytics-tab" type="button" data-analytics-tab="website-activity" role="tab" aria-selected="false">Website Activity</button>
+              </div>
+
+              <div id="analytics-overview-panel" class="analytics-tab-panel active">
+                <div class="analytics-summary-grid">
+                  <div class="analytics-stat-card">
+                    <span class="analytics-stat-label">Total website visits</span>
+                    <strong class="analytics-stat-value">0</strong>
+                    <small>No activity yet</small>
+                  </div>
+                  <div class="analytics-stat-card">
+                    <span class="analytics-stat-label">Time spent</span>
+                    <strong class="analytics-stat-value">0h</strong>
+                    <small>No usage tracked</small>
+                  </div>
+                  <div class="analytics-stat-card">
+                    <span class="analytics-stat-label">Blocked attempts</span>
+                    <strong class="analytics-stat-value">0</strong>
+                    <small>No blocked activity</small>
+                  </div>
+                  <div class="analytics-stat-card">
+                    <span class="analytics-stat-label">Active devices</span>
+                    <strong class="analytics-stat-value">0 / 0</strong>
+                    <small>No devices registered</small>
+                  </div>
+                </div>
+
+                <div class="chart-grid">
+                  <div class="chart-card chart-card--wide">
+                    <canvas id="daily-chart"></canvas>
+                  </div>
+                  <div class="chart-card chart-card--portrait">
+                    <canvas id="category-chart"></canvas>
+                  </div>
+                  <div class="chart-card chart-card--tall">
+                    <canvas id="status-radar-chart"></canvas>
+                  </div>
+                  <div class="chart-card chart-card--short">
+                    <canvas id="usage-bar-chart"></canvas>
+                  </div>
+                </div>
+
+                <div class="analytics-lower-grid">
+                  <div class="analytics-subpanel">
+                    <div class="subpanel-header">
+                      <h3>Most visited websites</h3>
+                    </div>
+                    <ul class="rank-list">
+                      <li><div class="site-name"><span class="site-icon fb">N</span><span>No website activity</span></div><strong>0</strong><em>0%</em></li>
+                    </ul>
+                  </div>
+
+                  <div class="analytics-subpanel">
+                    <div class="subpanel-header">
+                      <h3>Top blocked websites</h3>
+                    </div>
+                    <ul class="rank-list">
+                      <li><span>No blocked domains</span><strong>0</strong><em>0%</em></li>
+                    </ul>
+                  </div>
+
+                  <div class="analytics-subpanel wide-subpanel">
+                    <div class="subpanel-header">
+                      <h3>Website category breakdown</h3>
+                    </div>
+                    <div class="category-breakdown">
+                      <div class="bar-row"><span>Social media</span><div class="bar"><i style="width: 0%"></i></div><b>0%</b></div>
+                      <div class="bar-row"><span>Entertainment</span><div class="bar"><i style="width: 0%"></i></div><b>0%</b></div>
+                      <div class="bar-row"><span>Shopping</span><div class="bar"><i style="width: 0%"></i></div><b>0%</b></div>
+                      <div class="bar-row"><span>Other</span><div class="bar"><i style="width: 0%"></i></div><b>0%</b></div>
+                    </div>
+                  </div>
+
+                  <div class="analytics-subpanel wide-subpanel">
+                    <div class="subpanel-header">
+                      <h3>Device and browser status</h3>
+                    </div>
+                    <div class="browser-status-list">
+                      <div><span>Chrome</span><strong>Synced</strong></div>
+                      <div><span>Edge</span><strong>Synced</strong></div>
+                      <div><span>Brave</span><strong>Pending</strong></div>
+                      <div><span>Firefox</span><strong>Synced</strong></div>
+                    </div>
+                  </div>
+
+                  <div class="analytics-subpanel wide-subpanel">
+                    <div class="subpanel-header">
+                      <h3>Recent activity</h3>
+                    </div>
+                    <div class="table-responsive">
+                      <table class="activity-table">
+                        <thead>
+                          <tr>
+                            <th>Device</th>
+                            <th>User</th>
+                            <th>Domain</th>
+                            <th>Category</th>
+                            <th>Status</th>
+                            <th>Duration</th>
+                          </tr>
+                        </thead>
+                        <tbody data-admin-activity-table>
+                          <tr>
+                            <td colspan="6">No website activity yet.</td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+
+                </div>
+              </div>
+
+              <div id="analytics-mb-usage-panel" class="analytics-tab-panel">
+                <div class="analytics-subpanel wide-subpanel">
+                  <div class="subpanel-header">
+                    <h3>MB usage by device</h3>
+                  </div>
+                  <div class="table-responsive">
+                    <table class="activity-table">
+                      <thead>
+                        <tr>
+                          <th>User</th>
+                          <th>Laptop</th>
+                          <th>MB Used</th>
+                          <th>Online Hours</th>
+                        </tr>
+                      </thead>
+                      <tbody id="usage-table"></tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+
+              <div id="analytics-website-activity-panel" class="analytics-tab-panel">
+                <div class="analytics-lower-grid">
+                  <div class="analytics-subpanel">
+                    <div class="subpanel-header">
+                      <h3>Most visited websites</h3>
+                    </div>
+                    <ul class="rank-list">
+                      <li><div class="site-name"><span class="site-icon fb">N</span><span>No website activity</span></div><strong>0</strong><em>0%</em></li>
+                    </ul>
+                  </div>
+
+                  <div class="analytics-subpanel">
+                    <div class="subpanel-header">
+                      <h3>Top blocked websites</h3>
+                    </div>
+                    <ul class="rank-list">
+                      <li><div class="site-name"><span class="site-icon fb">N</span><span>No blocked domains</span></div><strong>0</strong><em>0%</em></li>
+                    </ul>
+                  </div>
+
+                  <div class="analytics-subpanel wide-subpanel">
+                    <div class="subpanel-header">
+                      <h3>Website category breakdown</h3>
+                    </div>
+                    <div class="category-breakdown">
+                      <div class="bar-row"><span>Social media</span><div class="bar"><i style="width: 0%"></i></div><b>0%</b></div>
+                      <div class="bar-row"><span>Entertainment</span><div class="bar"><i style="width: 0%"></i></div><b>0%</b></div>
+                      <div class="bar-row"><span>Shopping</span><div class="bar"><i style="width: 0%"></i></div><b>0%</b></div>
+                      <div class="bar-row"><span>Other</span><div class="bar"><i style="width: 0%"></i></div><b>0%</b></div>
+                    </div>
+                  </div>
+
+                  <div class="analytics-subpanel wide-subpanel">
+                    <div class="subpanel-header">
+                      <h3>Recent activity</h3>
+                    </div>
+                    <div class="table-responsive">
+                      <table class="activity-table">
+                        <thead>
+                          <tr>
+                            <th>Device</th>
+                            <th>User</th>
+                            <th>Domain</th>
+                            <th>Category</th>
+                            <th>Status</th>
+                            <th>Duration</th>
+                          </tr>
+                        </thead>
+                        <tbody data-admin-activity-table>
+                          <tr>
+                            <td colspan="6">No website activity yet.</td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section id="register-section" class="content-section">
+            <div class="panel register-panel">
+              <div class="panel-header">
+                <h2>Register devices</h2>
+                <button id="open-register-modal" class="primary-button" type="button">Register device</button>
+              </div>
+
+              <div class="table-toolbar table-filter-toolbar">
+                <input id="device-search" class="searchbox table-searchbox" type="search" placeholder="Search devices..." aria-label="Search devices" />
+                <select id="device-status-filter" class="filter-select" aria-label="Filter registered devices by status">
+                  <option value="all">All status</option>
+                </select>
+                <select id="device-surname-sort" class="filter-select" aria-label="Sort registered devices by surname">
+                  <option value="asc">Surname A–Z</option>
+                  <option value="desc">Surname Z–A</option>
+                </select>
+              </div>
+
+              <div class="table-responsive">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>User ID</th>
+                      <th>Laptop ID</th>
+                      <th>User</th>
+                      <th>Laptop</th>
+                      <th>MAC Address</th>
+                      <th>Gmail</th>
+                      <th>Status</th>
+                      <th>Action</th>
+                    </tr>
+                  </thead>
+                  <tbody id="devices-table"></tbody>
+                </table>
+              </div>
+            </div>
+          </section>
+
+          <section id="laptops-section" class="content-section">
+            <div class="panel register-panel">
+              <div class="panel-header">
+                <h2>Laptops</h2>
+                <button id="open-laptops-modal" class="primary-button" type="button">Add laptop</button>
+              </div>
+
+              <div class="table-toolbar table-filter-toolbar">
+                <input id="laptop-search" class="searchbox table-searchbox" type="search" placeholder="Search laptops..." aria-label="Search laptops" />
+                <select id="laptop-status-filter" class="filter-select" aria-label="Filter laptops by status">
+                  <option value="all">All status</option>
+                  <option value="available">Available</option>
+                  <option value="taken">Taken</option>
+                  <option value="working">Working</option>
+                  <option value="defective">Defective</option>
+                  <option value="disposal">Disposal</option>
+                </select>
+              </div>
+
+              <div class="table-responsive">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Laptop ID</th>
+                      <th>Brand</th>
+                      <th>Specs</th>
+                      <th>MAC</th>
+                      <th>Purchased</th>
+                      <th>Laptop Name</th>
+                      <th>Status</th>
+                      <th>Action</th>
+                    </tr>
+                  </thead>
+                  <tbody id="laptops-table"></tbody>
+                </table>
+              </div>
+            </div>
+          </section>
+
+          <section id="tickets-section" class="content-section">
+            <div class="panel register-panel">
+              <div class="panel-header">
+                <h2>Tickets received</h2>
+                <div class="toolbar-actions">
+                  <button id="open-issue-modal" class="primary-button" type="button">Report IT issue</button>
+                </div>
+              </div>
+
+              <div class="table-responsive">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Employee</th>
+                      <th>Laptop ID</th>
+                      <th>Category</th>
+                      <th>Issue date</th>
+                      <th>Priority</th>
+                      <th>Status</th>
+                      <th>Action</th>
+                    </tr>
+                  </thead>
+                  <tbody id="tickets-table"></tbody>
+                </table>
+              </div>
+            </div>
+          </section>
+
+          <section id="employee-section" class="content-section">
+            <div class="panel register-panel">
+              <div class="panel-header">
+                <h2>Employee module</h2>
+                <div class="toolbar-actions">
+                  <button id="open-employee-modal" class="primary-button" type="button" onclick="openEmployeeModal()">Add employee</button>
+                </div>
+              </div>
+
+              <div class="table-toolbar table-filter-toolbar">
+                <input id="employee-search" class="searchbox table-searchbox" type="search" placeholder="Search employees..." aria-label="Search employees" />
+                <select id="employee-status-filter" class="filter-select" aria-label="Filter employees by status">
+                  <option value="all">All employees</option>
+                  <option value="active">Active</option>
+                  <option value="inactive">Inactive</option>
+                </select>
+                <select id="employee-department-filter" class="filter-select" aria-label="Filter employees by department">
+                  <option value="all">All departments</option>
+                </select>
+                <select id="employee-role-filter" class="filter-select" aria-label="Filter employees by role">
+                  <option value="all">All roles</option>
+                </select>
+              </div>
+
+              <div class="table-responsive">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Employee ID</th>
+                      <th>Full Name</th>
+                      <th>Gmail</th>
+                      <th>Department</th>
+                      <th>Role</th>
+                      <th>Status</th>
+                      <th>Admin Permission</th>
+                      <th>Admin UI Access</th>
+                      <th>Action</th>
+                    </tr>
+                  </thead>
+                  <tbody id="employees-table"></tbody>
+                </table>
+              </div>
+            </div>
+          </section>
+
+          <section id="replacement-section" class="content-section">
+            <div class="panel register-panel">
+              <div class="panel-header">
+                <h2>Laptop replacement module</h2>
+                <button id="open-replacement-modal" class="primary-button" type="button">Log replacement</button>
+              </div>
+
+              <div class="table-responsive">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Employee</th>
+                      <th>Old Laptop ID</th>
+                      <th>New Laptop ID</th>
+                      <th>Reason</th>
+                      <th>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody id="replacement-table"></tbody>
+                </table>
+              </div>
+            </div>
+          </section>
+
+          <section id="settings-section" class="content-section">
+            <div class="panel settings-panel">
+              <div class="panel-header">
+                <h2>Settings</h2>
+              </div>
+
+              <div class="settings-tabs" role="tablist" aria-label="Settings tabs">
+                <button type="button" class="settings-tab active" data-settings-tab="general" role="tab" aria-selected="true">General Settings</button>
+                <button type="button" class="settings-tab" data-settings-tab="security" role="tab" aria-selected="false">Account Security</button>
+                <button type="button" class="settings-tab" data-settings-tab="roles" role="tab" aria-selected="false">Employee Roles &amp; Permissions</button>
+                <button type="button" class="settings-tab" data-settings-tab="notifications" role="tab" aria-selected="false">Notifications</button>
+              </div>
+
+              <div class="settings-panel active" data-settings-panel="general">
+                <div class="settings-list">
+                  <div class="setting-item">
+                    <div>
+                      <h3>Incognito blocker</h3>
+                      <p>Closes Incognito tabs when enabled. The extension must be allowed in Incognito and connected to the admin policy.</p>
+                    </div>
+                    <label class="switch" aria-label="Toggle Incognito blocker">
+                      <input id="settings-incognito-toggle" type="checkbox" checked />
+                      <span class="slider"></span>
+                    </label>
+                  </div>
+
+                  <div class="setting-item">
+                    <div>
+                      <h3>IT Manager email</h3>
+                      <p>Set the support inbox used for employee laptop issue reports.</p>
+                    </div>
+                    <input id="admin-email" type="email" value="" placeholder="it.manager@company.com" />
+                  </div>
+
+                  <div class="setting-item">
+                    <div>
+                      <h3>Customize color</h3>
+                      <p>Set the main accent color used on the dashboard.</p>
+                    </div>
+                    <label class="accent-picker" aria-label="Choose dashboard accent color">
+                      <input id="accent-picker" type="color" value="#555555" />
+                    </label>
+                  </div>
+
+                  <div class="setting-item">
+                    <div>
+                      <h3>Policy sync</h3>
+                      <p>Automatic refresh for registered devices every hour.</p>
+                    </div>
+                    <button class="secondary-button" type="button">Enabled</button>
+                  </div>
+
+                  <div class="setting-item retention-setting">
+                    <div>
+                      <h3>Disposal laptop cleanup</h3>
+                      <p>Registered laptops marked as disposal are automatically removed after the selected number of days. This only applies to disposal data and keeps active employee and laptop records intact.</p>
+                    </div>
+                    <div class="retention-controls">
+                      <label class="retention-field">
+                        <span>Day</span>
+                        <input id="disposal-retention-days" type="number" min="1" max="365" step="1" value="30" />
+                      </label>
+                      <button id="delete-old-disposal-laptops" class="secondary-button" type="button">Delete disposal laptops</button>
+                    </div>
+                  </div>
+
+                  <div class="setting-item changelog-setting">
+                    <div>
+                      <h3>Update log</h3>
+                      <p>Track app versions, release dates, and the changes included in each system update.</p>
+                    </div>
+                    <button id="open-changelog-modal" class="version-badge" type="button" aria-label="Open update log">v1.5.1</button>
+                  </div>
+
+                  <div class="settings-actions">
+                    <button id="general-settings-save" type="button" class="primary-button">Save</button>
+                  </div>
+                </div>
+              </div>
+
+              <div class="settings-panel" data-settings-panel="security">
+                <div class="settings-list">
+                  <div class="settings-card">
+                    <div class="settings-card-header">
+                      <div>
+                        <h3>Account Security</h3>
+                        <p>Update your password and keep the admin account protected.</p>
+                      </div>
+                    </div>
+
+                    <div class="settings-card-body">
+                      <form id="account-security-form" class="account-security-form">
+                        <div class="password-field-row">
+                          <label for="account-email">Email Address</label>
+                          <input id="account-email" type="email" placeholder="name@company.com" />
+                        </div>
+
+                        <div class="password-field-row">
+                          <label for="current-password">Current Password</label>
+                          <div class="password-input-wrap">
+                            <input id="current-password" type="password" placeholder="Enter your current password" />
+                            <button id="toggle-current-password" class="password-inline-toggle" type="button" aria-label="Show current password" aria-pressed="false" data-visible="false">
+                              <svg class="password-icon eye-open" viewBox="0 0 24 24" aria-hidden="true">
+                                <path d="M1.5 12S5.1 5.25 12 5.25 22.5 12 22.5 12 18.9 18.75 12 18.75 1.5 12 1.5 12Z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+                                <circle cx="12" cy="12" r="3.3" fill="none" stroke="currentColor" stroke-width="1.6"/>
+                              </svg>
+                              <svg class="password-icon eye-closed" viewBox="0 0 24 24" aria-hidden="true">
+                                <path d="M2.5 2.5L21.5 21.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+                                <path d="M10.2 10.2A3.2 3.2 0 0 0 13.8 13.8" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+                                <path d="M8.7 6.6A12.6 12.6 0 0 1 12 6.1c6.9 0 10.5 5.9 10.5 5.9a19.1 19.1 0 0 1-4.4 5.1M6.2 7.7A18.2 18.2 0 0 0 1.5 12s3.6 6.1 10.5 6.1c1.7 0 3.2-.3 4.5-.8" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+                              </svg>
+                            </button>
+                          </div>
+                        </div>
+
+                        <div class="password-field-row">
+                          <label for="new-password">New Password</label>
+                          <div class="password-input-wrap">
+                            <input id="new-password" type="password" placeholder="Enter your new password" />
+                            <button id="toggle-new-password" class="password-inline-toggle" type="button" aria-label="Show new password" aria-pressed="false" data-visible="false">
+                              <svg class="password-icon eye-open" viewBox="0 0 24 24" aria-hidden="true">
+                                <path d="M1.5 12S5.1 5.25 12 5.25 22.5 12 22.5 12 18.9 18.75 12 18.75 1.5 12 1.5 12Z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+                                <circle cx="12" cy="12" r="3.3" fill="none" stroke="currentColor" stroke-width="1.6"/>
+                              </svg>
+                              <svg class="password-icon eye-closed" viewBox="0 0 24 24" aria-hidden="true">
+                                <path d="M2.5 2.5L21.5 21.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+                                <path d="M10.2 10.2A3.2 3.2 0 0 0 13.8 13.8" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+                                <path d="M8.7 6.6A12.6 12.6 0 0 1 12 6.1c6.9 0 10.5 5.9 10.5 5.9a19.1 19.1 0 0 1-4.4 5.1M6.2 7.7A18.2 18.2 0 0 0 1.5 12s3.6 6.1 10.5 6.1c1.7 0 3.2-.3 4.5-.8" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+                              </svg>
+                            </button>
+                          </div>
+                        </div>
+
+                        <div class="password-field-row">
+                          <label for="confirm-password">Confirm New Password</label>
+                          <div class="password-input-wrap">
+                            <input id="confirm-password" type="password" placeholder="Confirm your new password" />
+                            <button id="toggle-confirm-password" class="password-inline-toggle" type="button" aria-label="Show confirm password" aria-pressed="false" data-visible="false">
+                              <svg class="password-icon eye-open" viewBox="0 0 24 24" aria-hidden="true">
+                                <path d="M1.5 12S5.1 5.25 12 5.25 22.5 12 22.5 12 18.9 18.75 12 18.75 1.5 12 1.5 12Z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+                                <circle cx="12" cy="12" r="3.3" fill="none" stroke="currentColor" stroke-width="1.6"/>
+                              </svg>
+                              <svg class="password-icon eye-closed" viewBox="0 0 24 24" aria-hidden="true">
+                                <path d="M2.5 2.5L21.5 21.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+                                <path d="M10.2 10.2A3.2 3.2 0 0 0 13.8 13.8" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+                                <path d="M8.7 6.6A12.6 12.6 0 0 1 12 6.1c6.9 0 10.5 5.9 10.5 5.9a19.1 19.1 0 0 1-4.4 5.1M6.2 7.7A18.2 18.2 0 0 0 1.5 12s3.6 6.1 10.5 6.1c1.7 0 3.2-.3 4.5-.8" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+                              </svg>
+                            </button>
+                          </div>
+                        </div>
+
+                        <div class="password-strength-row">
+                          <span>Password Strength:</span>
+                          <strong id="password-strength-indicator" class="password-strength-indicator neutral">Not started</strong>
+                        </div>
+
+                        <div id="account-security-message" class="settings-message" aria-live="polite"></div>
+
+                        <div class="settings-actions">
+                          <button type="submit" class="primary-button">Save</button>
+                          <button type="reset" class="secondary-button">Cancel</button>
+                        </div>
+                      </form>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="settings-panel" data-settings-panel="roles">
+                <div class="settings-list">
+                  <div class="settings-card">
+                    <div class="settings-card-header">
+                      <div>
+                        <h3>Employee Roles &amp; Permissions</h3>
+                        <p>Assign or change access for employees using the current MINDLOCK role model.</p>
+                      </div>
+                    </div>
+
+                    <div class="settings-card-body">
+                      <div class="role-assignment-toolbar">
+                        <input id="role-assignment-search" class="searchbox" type="search" placeholder="Search employees..." aria-label="Search employees for role assignment" />
+                        <button id="refresh-role-list" class="icon-button" type="button" aria-label="Refresh employee roles">
+                          <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false">
+                            <path d="M20 12a8 8 0 0 1-13.66 5.66M4 12a8 8 0 0 1 13.66-5.66M15 3h5v5M9 21H4v-5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                          </svg>
+                        </button>
+                        <button id="add-admin-button" class="primary-button small-button" type="button">Add admin</button>
+                      </div>
+
+                      <div class="role-assignment-list" id="role-assignment-list"></div>
+                      <div id="role-assignment-message" class="settings-message" aria-live="polite"></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="settings-panel" data-settings-panel="notifications">
+                <div class="settings-list">
+                  <div class="setting-item">
+                    <div>
+                      <h3>Notifications</h3>
+                      <p>Choose which ticket events should send admin alerts.</p>
+                    </div>
+                    <div class="checkbox-list">
+                      <label class="checkbox-inline"><input id="settings-notify-new-ticket" type="checkbox" checked /><span>New ticket alerts</span></label>
+                      <label class="checkbox-inline"><input id="settings-notify-high-priority" type="checkbox" checked /><span>High-priority tickets</span></label>
+                      <label class="checkbox-inline"><input id="settings-notify-new-employee-message" type="checkbox" checked /><span>Employee message updates</span></label>
+                    </div>
+                  </div>
+                  <div class="settings-actions">
+                    <button id="settings-notifications-save" type="button" class="primary-button">Save</button>
+                  </div>
+                </div>
+              </div>
+
+            </div>
+          </section>
+
+          <section id="ticket-settings-section" class="content-section">
+            <div class="panel settings-panel">
+              <div class="panel-header">
+                <h2>Ticket Settings</h2>
+              </div>
+
+              <div class="ticket-settings-tabs" role="tablist" aria-label="Ticket settings tabs">
+                <button type="button" class="ticket-settings-tab active" data-ticket-tab="general" role="tab" aria-selected="true">General</button>
+                <button type="button" class="ticket-settings-tab" data-ticket-tab="categories" role="tab" aria-selected="false">Categories</button>
+                <button type="button" class="ticket-settings-tab" data-ticket-tab="retention" role="tab" aria-selected="false">Retention</button>
+                <button type="button" class="ticket-settings-tab" data-ticket-tab="notifications" role="tab" aria-selected="false">Notifications</button>
+                <button type="button" class="ticket-settings-tab" data-ticket-tab="workflow" role="tab" aria-selected="false">Workflow</button>
+                <button type="button" class="ticket-settings-tab" data-ticket-tab="security" role="tab" aria-selected="false">Security</button>
+                <button type="button" class="ticket-settings-tab" data-ticket-tab="audit" role="tab" aria-selected="false">Audit Log</button>
+              </div>
+
+              <div class="ticket-settings-panel active" data-ticket-panel="general">
+                <div class="settings-list">
+                  <div class="setting-item">
+                    <div>
+                      <h3>Ticket system enabled</h3>
+                      <p>Enable or disable the employee ticket workflow for support requests.</p>
+                    </div>
+                    <label class="switch" aria-label="Toggle ticket system">
+                      <input id="ticket-settings-enabled" type="checkbox" checked />
+                      <span class="slider"></span>
+                    </label>
+                  </div>
+
+                  <div class="setting-item">
+                    <div>
+                      <h3>Default status</h3>
+                      <p>New tickets will start in this state until the admin reviews them.</p>
+                    </div>
+                    <select id="ticket-default-status" class="field-input">
+                      <option value="Open">Open</option>
+                      <option value="In Progress">In Progress</option>
+                      <option value="Waiting for Employee">Waiting for Employee</option>
+                    </select>
+                  </div>
+
+                  <div class="setting-item">
+                    <div>
+                      <h3>Default priority</h3>
+                      <p>Sets the escalation level for newly created employee issues.</p>
+                    </div>
+                    <select id="ticket-default-priority" class="field-input">
+                      <option value="Low">Low</option>
+                      <option value="Medium">Medium</option>
+                      <option value="High">High</option>
+                      <option value="Critical">Critical</option>
+                    </select>
+                  </div>
+
+                  <div class="setting-item">
+                    <div>
+                      <h3>Ticket ID prefix</h3>
+                      <p>Used for new ticket numbering in the admin dashboard and reports.</p>
+                    </div>
+                    <input id="ticket-id-format" type="text" value="TKT-2026-0001" placeholder="TKT-2026-0001" />
+                  </div>
+
+                  <div class="setting-item">
+                    <div>
+                      <h3>Default assignee</h3>
+                      <p>The team or admin queue assigned to new issues by default.</p>
+                    </div>
+                    <input id="ticket-default-assignment" type="text" value="IT Support" placeholder="IT Support" />
+                  </div>
+
+                  <div class="setting-item">
+                    <div>
+                      <h3>Support instructions</h3>
+                      <p>Visible in the employee issue report flow so staff know when to contact support.</p>
+                    </div>
+                    <textarea id="ticket-support-instructions" rows="3" class="field-input">Contact the IT support desk for hardware, website, extension, or access issues.</textarea>
+                  </div>
+                </div>
+              </div>
+
+              <div class="ticket-settings-panel" data-ticket-panel="categories">
+                <div class="settings-list">
+                  <div class="issue-category-card">
+                    <div class="issue-category-header">
+                      <div class="issue-category-header-copy">
+                        <h3>Issue categories</h3>
+                        <p>Manage the ticket categories employees can select when reporting an issue.</p>
+                      </div>
+                      <button id="ticket-add-category" type="button" class="primary-button add-category-button">+ Add Category</button>
+                    </div>
+                    <div id="ticket-category-list" class="ticket-category-list"></div>
+                  </div>
+
+                  <div class="setting-item">
+                    <div>
+                      <h3>Priority levels</h3>
+                      <p>Review the escalation levels used by the support team.</p>
+                    </div>
+                    <div class="checkbox-list">
+                      <label class="checkbox-inline"><input type="checkbox" data-ticket-priority="Low" checked /><span>Low</span></label>
+                      <label class="checkbox-inline"><input type="checkbox" data-ticket-priority="Medium" checked /><span>Medium</span></label>
+                      <label class="checkbox-inline"><input type="checkbox" data-ticket-priority="High" checked /><span>High</span></label>
+                      <label class="checkbox-inline"><input type="checkbox" data-ticket-priority="Critical" checked /><span>Critical</span></label>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="ticket-settings-panel" data-ticket-panel="retention">
+                <div class="retention-subtabs" role="tablist" aria-label="Retention settings tabs">
+                  <button type="button" class="retention-subtab active" data-retention-tab="policy" role="tab" aria-selected="true">Retention Policy</button>
+                  <button type="button" class="retention-subtab" data-retention-tab="history" role="tab" aria-selected="false">Retention History</button>
+                </div>
+
+                <div class="settings-list">
+                  <div class="retention-subpanel active" data-retention-panel="policy">
+                    <div class="setting-item retention-setting">
+                      <div>
+                        <h3>Message retention policy</h3>
+                        <p>Archive old ticket comments automatically after the given number of days. Active tickets remain protected until they are resolved or closed.</p>
+                      </div>
+                      <div class="retention-controls">
+                        <label class="retention-field">
+                          <span>Days</span>
+                          <input id="ticket-message-retention-days" type="number" min="1" max="365" step="1" value="30" />
+                        </label>
+                        <label class="checkbox-inline">
+                          <input id="ticket-keep-messages-indefinitely" type="checkbox" />
+                          <span>Keep indefinitely</span>
+                        </label>
+                        <label class="checkbox-inline">
+                          <input id="ticket-auto-cleanup-enabled" type="checkbox" checked />
+                          <span>Auto cleanup</span>
+                        </label>
+                      </div>
+                    </div>
+
+                    <div class="setting-item retention-setting">
+                      <div>
+                        <h3>Resolved/closed ticket cleanup</h3>
+                        <p>Automatically remove resolved or closed tickets after the selected retention period so older case records do not accumulate.</p>
+                      </div>
+                      <div class="retention-controls compact-inline-control">
+                        <label class="retention-field">
+                          <span>Days</span>
+                          <input id="ticket-closed-retention-days" type="number" min="1" max="3650" step="1" value="3" />
+                        </label>
+                      </div>
+                    </div>
+
+                    <div class="setting-item">
+                      <div>
+                        <h3>Cleanup preview</h3>
+                        <p>Shows the number of archived messages that would be removed based on current retention rules.</p>
+                      </div>
+                      <div class="retention-controls">
+                        <span id="ticket-cleanup-preview" class="version-badge">0 message(s) eligible for cleanup</span>
+                        <button id="ticket-run-cleanup" class="secondary-button" type="button">Run cleanup</button>
+                      </div>
+                    </div>
+
+                    <div class="setting-item">
+                      <div>
+                        <h3>Keep retention history for</h3>
+                        <p>Automatically remove older cleanup events once they exceed the selected retention window.</p>
+                      </div>
+                      <div class="retention-controls compact-inline-control">
+                        <label class="retention-field">
+                          <span>Days</span>
+                          <input id="ticket-history-retention-days" type="number" min="1" max="3650" step="1" value="90" />
+                        </label>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="retention-subpanel" data-retention-panel="history">
+                    <div class="retention-history-card">
+                      <div class="retention-history-header">
+                        <div class="retention-history-title-wrap">
+                          <div class="retention-history-icon">🗑️</div>
+                          <div>
+                            <h3>Retention History</h3>
+                            <p>View the history of message cleanup runs and recorded deletions.</p>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div class="retention-summary-grid">
+                        <div class="retention-summary-card">
+                          <div class="retention-summary-icon accent-blue">↻</div>
+                          <div class="retention-summary-copy">
+                            <div class="retention-summary-label">Cleanup Runs</div>
+                            <div id="retention-runs-count" class="retention-summary-value">0</div>
+                            <div class="retention-summary-meta">Total runs performed</div>
+                          </div>
+                        </div>
+
+                        <div class="retention-summary-card">
+                          <div class="retention-summary-icon accent-green">🗑</div>
+                          <div class="retention-summary-copy">
+                            <div class="retention-summary-label">Messages Removed</div>
+                            <div id="retention-removed-count" class="retention-summary-value">0</div>
+                            <div class="retention-summary-meta">Total messages deleted</div>
+                          </div>
+                        </div>
+
+                        <div class="retention-summary-card">
+                          <div class="retention-summary-icon accent-purple">⏱</div>
+                          <div class="retention-summary-copy">
+                            <div class="retention-summary-label">Last Cleanup</div>
+                            <div id="retention-last-cleanup" class="retention-summary-value">N/A</div>
+                            <div class="retention-summary-meta">Most recent run</div>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div class="retention-history-toolbar">
+                        <div class="segment-control" aria-label="Retention history filters">
+                          <button type="button" class="segment-btn active" data-history-filter="all">All</button>
+                          <button type="button" class="segment-btn" data-history-filter="manual">Manual</button>
+                          <button type="button" class="segment-btn" data-history-filter="scheduled">Scheduled</button>
+                        </div>
+
+                        <div class="retention-search-wrap">
+                          <input id="ticket-cleanup-search" class="retention-search-input" type="search" placeholder="Search by date or keyword..." aria-label="Search retention history" />
+                        </div>
+                      </div>
+
+                      <div class="retention-history-table-wrap">
+                        <table class="retention-history-table">
+                          <thead>
+                            <tr>
+                              <th>Date &amp; Time</th>
+                              <th>Messages Deleted</th>
+                              <th>Status</th>
+                              <th>Mode</th>
+                            </tr>
+                          </thead>
+                          <tbody id="ticket-cleanup-history"></tbody>
+                        </table>
+                      </div>
+
+                      <div id="retention-results-summary" class="retention-results-summary">Showing 0 of 0 records</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="ticket-settings-panel" data-ticket-panel="notifications">
+                <div class="settings-list">
+                  <div class="setting-item">
+                    <div>
+                      <h3>Notifications</h3>
+                      <p>Send admin alerts for new tickets, priority escalations, and employee replies.</p>
+                    </div>
+                    <div class="checkbox-list">
+                      <label class="checkbox-inline"><input id="ticket-notify-new-ticket" type="checkbox" checked /><span>New ticket</span></label>
+                      <label class="checkbox-inline"><input id="ticket-notify-high-priority" type="checkbox" checked /><span>High priority</span></label>
+                      <label class="checkbox-inline"><input id="ticket-notify-new-employee-message" type="checkbox" checked /><span>Employee reply</span></label>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="ticket-settings-panel" data-ticket-panel="workflow">
+                <div class="settings-list">
+                  <div class="setting-item">
+                    <div>
+                      <h3>Workflow rules</h3>
+                      <p>Define how tickets move between states and when they can be reopened.</p>
+                    </div>
+                    <div class="checkbox-list">
+                      <label class="checkbox-inline"><input id="ticket-allow-employee-reopen" type="checkbox" checked /><span>Allow employee reopen</span></label>
+                      <label class="checkbox-inline"><input id="ticket-allow-admin-reopen" type="checkbox" checked /><span>Allow admin reopen</span></label>
+                      <label class="checkbox-inline"><input id="ticket-require-resolution-notes" type="checkbox" /><span>Require resolution notes</span></label>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="ticket-settings-panel" data-ticket-panel="security">
+                <div class="settings-list">
+                  <div class="setting-item">
+                    <div>
+                      <h3>Security & access</h3>
+                      <p>Control who can manage ticket settings and access the ticketing system.</p>
+                    </div>
+                    <div class="checkbox-list">
+                      <label class="checkbox-inline"><input id="ticket-admin-only-settings" type="checkbox" checked /><span>Admin only settings</span></label>
+                      <label class="checkbox-inline"><input id="ticket-restrict-management-by-role" type="checkbox" checked /><span>Restrict management by role</span></label>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="ticket-settings-panel" data-ticket-panel="audit">
+                <div class="settings-list">
+                  <div class="setting-item">
+                    <div>
+                      <h3>Audit log</h3>
+                      <p>Review the recent actions taken in the ticketing module.</p>
+                    </div>
+                    <div class="compact-table-wrap">
+                      <table class="compact-table">
+                        <thead>
+                          <tr>
+                            <th>Action</th>
+                            <th>User</th>
+                            <th>Time</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          <tr><td>Ticket status change</td><td>Admin</td><td>Today</td></tr>
+                          <tr><td>Retention cleanup</td><td>System</td><td>Today</td></tr>
+                          <tr><td>Assignment update</td><td>Manager</td><td>Yesterday</td></tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="setting-item ticket-settings-save-row">
+                <div>
+                  <h3>Save ticket settings</h3>
+                  <p>Persist the current support ticket behavior and retention preference.</p>
+                </div>
+                <button id="ticket-settings-save" class="primary-button" type="button">Save</button>
+              </div>
+            </div>
+          </section>
+        </main>
+      </div>
+    </div>
+
+    <div id="changelog-modal" class="modal hidden" aria-hidden="true">
+      <div class="modal-backdrop" data-close="changelog-modal"></div>
+      <div class="modal-card changelog-modal-card" role="dialog" aria-modal="true" aria-labelledby="changelog-modal-title">
+        <div class="modal-header">
+          <h3 id="changelog-modal-title">Update log</h3>
+          <button class="close-changelog-modal changelog-close-button" type="button" aria-label="Close update log" onclick="handleChangelogClose()">✕</button>
+        </div>
+        <div class="changelog-modal-body">
+          <div id="changelog-modal-list"></div>
+        </div>
+        <div class="changelog-modal-footer">
+          <label class="changelog-dont-show">
+            <input id="changelog-dont-show" type="checkbox" />
+            <span>Don’t show again this session</span>
+          </label>
+          <div class="modal-actions">
+            <button type="button" class="secondary-button close-changelog-modal" onclick="handleChangelogClose()">Close</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="role-assignment-modal" class="modal hidden" data-close="role-assignment-modal" aria-hidden="true">
+      <div class="modal-backdrop" data-close="role-assignment-modal"></div>
+      <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="role-assignment-title">
+        <div class="modal-header">
+          <h3 id="role-assignment-title">Assign role</h3>
+          <button id="role-assignment-close" class="close-modal" type="button" aria-label="Close role assignment" data-close="role-assignment-modal">✕</button>
+        </div>
+
+        <form id="role-assignment-form" class="stacked-form device-form">
+          <input id="role-assignment-employee-id" type="hidden" />
+          <div class="role-assignment-details">
+            <div><strong>Employee</strong></div>
+            <div id="role-assignment-name">Employee</div>
+            <div id="role-assignment-email">employee@company.com</div>
+          </div>
+
+          <label>
+            Role
+            <select id="role-assignment-role" class="field-input">
+              <option value="Administrator">Admin</option>
+              <option value="IT Staff">IT Staff</option>
+              <option value="Employee">Employee</option>
+            </select>
+          </label>
+
+          <div id="role-assignment-credential-panel" class="stacked-form" style="margin-top: 0.5rem;">
+            <label>
+              Login password
+              <div class="password-input-wrap role-assignment-password-wrap" style="gap: 0.5rem;">
+                <div class="role-assignment-password-field">
+                  <input id="role-assignment-password" type="password" class="field-input" placeholder="Generate or enter a password" />
+                  <button id="toggle-role-assignment-password" class="password-toggle" type="button" aria-label="Show password" aria-pressed="false" data-visible="false">
+                    <svg class="password-icon eye-open" viewBox="0 0 24 24" aria-hidden="true">
+                      <path d="M1.5 12S5.1 5.25 12 5.25 22.5 12 22.5 12 18.9 18.75 12 18.75 1.5 12 1.5 12Z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+                      <circle cx="12" cy="12" r="3.3" fill="none" stroke="currentColor" stroke-width="1.6"/>
+                    </svg>
+                    <svg class="password-icon eye-closed" viewBox="0 0 24 24" aria-hidden="true">
+                      <path d="M2.5 2.5L21.5 21.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+                      <path d="M10.2 10.2A3.2 3.2 0 0 0 13.8 13.8" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+                      <path d="M8.7 6.6A12.6 12.6 0 0 1 12 6.1c6.9 0 10.5 5.9 10.5 5.9a19.1 19.1 0 0 1-4.4 5.1M6.2 7.7A18.2 18.2 0 0 0 1.5 12s3.6 6.1 10.5 6.1c1.7 0 3.2-.3 4.5-.8" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                  </button>
+                </div>
+                <button type="button" id="generate-role-assignment-password" class="secondary-button small-button">Generate</button>
+              </div>
+            </label>
+          </div>
+
+          <div class="modal-actions">
+            <button type="button" class="secondary-button" id="role-assignment-cancel">Cancel</button>
+            <button type="submit" class="primary-button">Save</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <div id="device-modal" class="modal hidden" aria-hidden="true">
+      <div class="modal-backdrop" data-close="device-modal"></div>
+      <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="device-modal-title">
+        <div class="modal-header">
+          <h3 id="device-modal-title">Register device</h3>
+          <button id="close-device-modal" class="icon-button close-modal" type="button" aria-label="Close registration form" data-close="device-modal">✕</button>
+        </div>
+
+        <form id="device-register-form" class="stacked-form device-form">
+          <input id="device-edit-id" type="hidden" />
+
+          <label>
+            Employee ID
+            <input id="device-employee-id" type="text" placeholder="EMP-001" required />
+          </label>
+          <label>
+            Laptop ID
+            <input id="device-laptop-id" type="text" placeholder="LT-001" required />
+          </label>
+          <label>
+            Employee name
+            <input id="device-preview-name" type="text" readonly placeholder="Name" />
+          </label>
+          <label>
+            Gmail address
+            <input id="device-preview-email" type="email" readonly placeholder="Email " />
+          </label>
+          <label>
+            Laptop name
+            <input id="device-preview-laptop" type="text" readonly placeholder="Laptop name " />
+          </label>
+          <label>
+            Mac address
+            <input id="device-preview-mac" type="text" readonly placeholder="MAC address " />
+          </label>
+
+          <div class="modal-actions">
+            <button type="button" class="secondary-button close-modal" data-close="device-modal">Cancel</button>
+            <button type="submit" class="primary-button">Save device</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <div id="laptop-modal" class="modal hidden" aria-hidden="true">
+      <div class="modal-backdrop" data-close="laptop-modal"></div>
+      <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="laptop-modal-title">
+        <div class="modal-header">
+          <h3 id="laptop-modal-title">Laptop info</h3>
+          <button class="icon-button close-laptop-modal" type="button" aria-label="Close laptop form">✕</button>
+        </div>
+
+        <form id="laptop-register-form" class="stacked-form device-form">
+          <input id="laptop-edit-id" type="hidden" />
+
+          <label>
+            Brand name
+            <input id="laptop-brand" type="text" placeholder="Dell" required />
+          </label>
+          <label>
+            Laptop name
+            <input id="laptop-name" type="text" placeholder="Dell Inspiron 15" required />
+          </label>
+          <label>
+            Specs
+            <input id="laptop-specs" type="text" placeholder="Intel i5, 16GB RAM, 512GB SSD" required />
+          </label>
+          <label>
+            Mac address
+            <input id="laptop-mac" type="text" placeholder="00:1A:2B:3C:4D:5E" required />
+          </label>
+          <label>
+            Purchased date
+            <input id="laptop-purchased-at" type="date" required />
+          </label>
+          <label>
+            Condition
+            <select id="laptop-status">
+              <option value="working">Working</option>
+              <option value="defective">Defective</option>
+              <option value="disposal">Disposal</option>
+              <option value="available" selected>Available</option>
+              <option value="taken">Taken</option>
+            </select>
+          </label>
+
+          <div class="form-row">
+            <label class="full-width">
+              Laptop ID
+              <input id="laptop-laptop-id" type="text" readonly />
+            </label>
+          </div>
+
+          <div class="modal-actions">
+            <button type="button" class="secondary-button close-laptop-modal">Cancel</button>
+            <button type="submit" class="primary-button">Save laptop</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <div id="employee-modal" class="modal hidden" aria-hidden="true">
+      <div class="modal-backdrop" data-close="employee-modal"></div>
+      <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="employee-modal-title">
+        <div class="modal-header">
+          <h3 id="employee-modal-title">Employee info</h3>
+          <button class="icon-button close-employee-modal" type="button" aria-label="Close employee form" onclick="closeEmployeeModal()">✕</button>
+        </div>
+
+        <form id="employee-form" class="stacked-form device-form">
+          <input id="employee-edit-id" type="hidden" />
+          <label>
+            Employee ID
+            <input id="employee-id" type="text" placeholder="EMP-001" required />
+          </label>
+          <label>
+            Full name
+            <input id="employee-name" type="text" placeholder="John Gomez" required />
+          </label>
+          <label>
+            Gmail address
+            <input id="employee-email" type="email" placeholder="john@gmail.com" required />
+          </label>
+          <label>
+            Department
+            <input id="employee-department" type="text" placeholder="IT" required />
+          </label>
+          <label>
+            Role
+            <select id="employee-role" class="field-input" required>
+              <option value="Employee">Employee</option>
+              <option value="Admin">Admin</option>
+              <option value="IT Staff">IT Staff</option>
+            </select>
+          </label>
+
+          <label>
+            Login password
+            <div class="password-input-wrap role-assignment-password-wrap">
+              <div class="role-assignment-password-field">
+                <input id="employee-password" type="password" placeholder="Enter password for admin login" />
+                <button id="toggle-employee-password" class="password-toggle" type="button" aria-label="Show password" aria-pressed="false" data-visible="false">
+                  <svg class="password-icon eye-open" viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M1.5 12S5.1 5.25 12 5.25 22.5 12 22.5 12 18.9 18.75 12 18.75 1.5 12 1.5 12Z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+                    <circle cx="12" cy="12" r="3.3" fill="none" stroke="currentColor" stroke-width="1.6"/>
+                  </svg>
+                  <svg class="password-icon eye-closed" viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M2.5 2.5L21.5 21.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+                    <path d="M10.2 10.2A3.2 3.2 0 0 0 13.8 13.8" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+                    <path d="M8.7 6.6A12.6 12.6 0 0 1 12 6.1c6.9 0 10.5 5.9 10.5 5.9a19.1 19.1 0 0 1-4.4 5.1M6.2 7.7A18.2 18.2 0 0 0 1.5 12s3.6 6.1 10.5 6.1c1.7 0 3.2-.3 4.5-.8" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+                  </svg>
+                </button>
+              </div>
+              <button type="button" id="generate-employee-password" class="secondary-button small-button">Generate</button>
+            </div>
+          </label>
+
+          <label>
+            Confirm password
+            <div class="password-input-wrap role-assignment-password-wrap">
+              <div class="role-assignment-password-field">
+                <input id="employee-confirm-password" type="password" placeholder="Re-enter password" />
+                <button id="toggle-employee-confirm-password" class="password-toggle" type="button" aria-label="Show password" aria-pressed="false" data-visible="false">
+                  <svg class="password-icon eye-open" viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M1.5 12S5.1 5.25 12 5.25 22.5 12 22.5 12 18.9 18.75 12 18.75 1.5 12 1.5 12Z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+                    <circle cx="12" cy="12" r="3.3" fill="none" stroke="currentColor" stroke-width="1.6"/>
+                  </svg>
+                  <svg class="password-icon eye-closed" viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M2.5 2.5L21.5 21.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+                    <path d="M10.2 10.2A3.2 3.2 0 0 0 13.8 13.8" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+                    <path d="M8.7 6.6A12.6 12.6 0 0 1 12 6.1c6.9 0 10.5 5.9 10.5 5.9a19.1 19.1 0 0 1-4.4 5.1M6.2 7.7A18.2 18.2 0 0 0 1.5 12s3.6 6.1 10.5 6.1c1.7 0 3.2-.3 4.5-.8" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+                  </svg>
+                </button>
+              </div>
+            </div>
+          </label>
+
+          <div class="modal-actions">
+            <button type="button" class="secondary-button close-employee-modal" onclick="closeEmployeeModal()">Cancel</button>
+            <button type="submit" class="primary-button">Save employee</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <div id="replacement-modal" class="modal hidden" aria-hidden="true">
+      <div class="modal-backdrop" data-close="replacement-modal"></div>
+      <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="replacement-modal-title">
+        <div class="modal-header">
+          <h3 id="replacement-modal-title">Laptop change</h3>
+          <button class="icon-button close-replacement-modal" type="button" aria-label="Close laptop replacement form">✕</button>
+        </div>
+
+        <form id="replacement-form" class="stacked-form device-form">
+          <label>
+            Employee
+            <select id="replacement-employee"></select>
+          </label>
+          <label>
+            Old laptop ID
+            <input id="replacement-old-id" type="text" placeholder="LT-001" required />
+          </label>
+          <label>
+            New laptop ID
+            <input id="replacement-new-id" type="text" placeholder="LT-024" required />
+          </label>
+          <label>
+            Reason
+            <input id="replacement-reason" type="text" placeholder="Broken screen" required />
+          </label>
+          <label>
+            Status
+            <select id="replacement-status">
+              <option value="Pending">Pending</option>
+              <option value="Approved">Approved</option>
+              <option value="Rejected">Rejected</option>
+            </select>
+          </label>
+
+          <div class="modal-actions">
+            <button type="button" class="secondary-button close-replacement-modal">Cancel</button>
+            <button type="submit" class="primary-button">Save change</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <div id="policy-modal" class="modal hidden" aria-hidden="true">
+      <div class="modal-backdrop" data-close="policy-modal"></div>
+      <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="policy-modal-title">
+        <div class="modal-header">
+          <h3 id="policy-modal-title">Edit website rule</h3>
+          <button class="icon-button close-policy-modal" type="button" aria-label="Close policy form">✕</button>
+        </div>
+
+        <form id="policy-form" class="stacked-form device-form">
+          <input id="policy-edit-id" type="hidden" />
+
+          <label>
+            Domain
+            <input id="policy-domain" type="text" placeholder="example.com" required />
+          </label>
+
+          <label>
+            Scope
+            <select id="policy-scope">
+              <option value="all">All users</option>
+              <option value="specific">Specific users</option>
+            </select>
+          </label>
+
+          <label id="policy-target-wrap">
+            Apply to employees
+            <select id="policy-user-target" multiple size="6" aria-label="Select employees for this blocking rule"></select>
+          </label>
+
+          <label>
+            Category
+            <select id="policy-category">
+              <option value="social">Social media</option>
+              <option value="entertainment">Entertainment</option>
+              <option value="gaming">Gaming</option>
+              <option value="custom">Custom</option>
+            </select>
+          </label>
+
+          <label>
+            Status
+            <select id="policy-enabled">
+              <option value="true">Active</option>
+              <option value="false">Inactive</option>
+            </select>
+          </label>
+
+          <div class="modal-actions">
+            <button type="button" class="secondary-button close-policy-modal">Cancel</button>
+            <button type="submit" class="primary-button">Save rule</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <div id="ticket-message-modal" class="modal hidden" aria-hidden="true">
+      <div class="modal-backdrop" data-close="ticket-message-modal"></div>
+      <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="ticket-message-title">
+        <div class="modal-header">
+          <h3 id="ticket-message-title">Ticket conversation</h3>
+          <button class="icon-button close-ticket-message-modal" type="button" aria-label="Close ticket conversation">✕</button>
+        </div>
+
+        <div class="ticket-message-thread" id="ticket-thread-body"></div>
+
+        <form id="ticket-message-form" class="stacked-form device-form">
+          <input id="ticket-message-id" type="hidden" />
+          <label>
+            Reply to employee
+            <textarea id="ticket-reply-text" rows="4" placeholder="Write an update for the employee..." required></textarea>
+          </label>
+
+          <div class="modal-actions">
+            <button type="button" class="secondary-button close-ticket-message-modal">Close</button>
+            <button type="submit" class="primary-button">Send update</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <div id="issue-modal" class="modal hidden" aria-hidden="true">
+      <div class="modal-backdrop" data-close="issue-modal"></div>
+      <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="issue-modal-title">
+        <div class="modal-header">
+          <h3 id="issue-modal-title">Report IT issue</h3>
+          <button class="icon-button close-issue-modal" type="button" aria-label="Close issue form">✕</button>
+        </div>
+
+        <form id="issue-form" class="stacked-form device-form">
+          <label>
+            Assigned employee
+            <input id="issue-employee" type="text" value="Auto-detecting..." readonly />
+          </label>
+          <label>
+            Assigned laptop
+            <input id="issue-laptop" type="text" value="Auto-detecting..." readonly />
+          </label>
+          <input id="issue-device-id" type="hidden" />
+          <label>
+            Issue category
+            <select id="issue-category">
+              <option value="Hardware">Hardware</option>
+              <option value="Software">Software</option>
+              <option value="Browser Extension">Browser Extension</option>
+              <option value="Website Blocking">Website Blocking</option>
+              <option value="Network / Internet">Network / Internet</option>
+              <option value="Other">Other</option>
+            </select>
+          </label>
+          <label>
+            Priority
+            <select id="issue-priority">
+              <option value="Low">Low</option>
+              <option value="Medium" selected>Medium</option>
+              <option value="High">High</option>
+              <option value="Critical">Critical</option>
+            </select>
+          </label>
+          <label>
+            Problem details
+            <textarea id="issue-description" rows="4" placeholder="Describe the laptop issue, error message, and impact on work." required></textarea>
+          </label>
+
+          <div class="modal-actions">
+            <button type="button" class="secondary-button close-issue-modal">Cancel</button>
+            <button type="submit" class="primary-button">Submit ticket</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <script src="app.js"></script>
+  </body>
+</html>

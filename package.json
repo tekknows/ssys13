@@ -1,0 +1,15 @@
+{
+  "name": "mindlock",
+  "private": true,
+  "scripts": {
+    "validate:supabase": "node scripts/validate-supabase.js",
+    "test:incognito": "node tests/incognito-blocker.test.js",
+    "test:security": "node tests/default-admin-bootstrap.test.js && node tests/security-account-resolution.test.js && node tests/secure-backend-sync.test.js && node tests/employee-permissions.test.js",
+    "start:backend": "node backend/server.js"
+  },
+  "dependencies": {
+    "@supabase/server": "^1.9.2",
+    "@supabase/ssr": "^0.12.7",
+    "@supabase/supabase-js": "^2.118.0"
+  }
+}

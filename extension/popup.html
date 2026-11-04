@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Device Dashboard</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body class="popup-page dashboard-theme">
+    <div class="dashboard-shell">
+      <header class="dashboard-header">
+        <div>
+          <div class="eyebrow">System</div>
+          <h1>Device Overview</h1>
+        </div>
+        <button class="close-button" type="button" aria-label="Close device dashboard">×</button>
+      </header>
+
+      <section class="info-banner">
+        <div class="banner-copy">
+          <span class="status-pill online">Online</span>
+          <h2>Managed device status</h2>
+        </div>
+        <button id="show-ticket-form" class="primary-btn" type="button" aria-controls="ticket-form-shell">Create ticket</button>
+      </section>
+
+      <section class="stats-grid">
+        <div class="stat-card card-accent">
+          <span class="label">Website visits</span>
+          <strong class="value">128</strong>
+          <small>Today</small>
+        </div>
+        <div class="stat-card">
+          <span class="label">Blocked</span>
+          <strong class="value">14</strong>
+          <small>Policies</small>
+        </div>
+        <div class="stat-card">
+          <span class="label">Sync</span>
+          <strong class="value">2m</strong>
+          <small>Last update</small>
+        </div>
+        <div class="stat-card">
+          <span class="label">Tickets</span>
+          <strong class="value">3</strong>
+          <small>Open</small>
+        </div>
+      </section>
+
+      <section class="device-card">
+        <div class="panel-header-row">
+          <h3>Endpoint details</h3>
+          <span class="status-pill subscribed">Active</span>
+        </div>
+
+        <div class="meta-grid">
+          <div>
+            <span class="meta-label">Employee</span>
+            <input id="issue-employee" type="text" value="Auto-detecting..." readonly />
+          </div>
+          <div>
+            <span class="meta-label">Laptop</span>
+            <input id="issue-laptop" type="text" value="Auto-detecting..." readonly />
+          </div>
+          <div>
+            <span class="meta-label">Device ID</span>
+            <strong id="device-display-id">--</strong>
+          </div>
+          <div>
+            <span class="meta-label">Policy sync</span>
+            <strong>Healthy</strong>
+          </div>
+        </div>
+      </section>
+
+      <section class="ticket-list-panel">
+        <div class="panel-header-row">
+          <h3>Recent tickets</h3>
+          <a href="#" class="panel-link">View all</a>
+        </div>
+        <div id="issue-ticket-list" class="issue-ticket-list"></div>
+      </section>
+
+      <section id="ticket-form-shell" class="ticket-form-shell hidden">
+        <div class="form-header-row">
+          <h3>Create issue</h3>
+          <span class="tiny-label">IT support</span>
+        </div>
+
+        <form id="issue-popup-form" class="popup-form">
+          <input id="issue-device-id" type="hidden" />
+
+          <div class="input-row two-col">
+            <div class="field-group">
+              <label for="issue-category">Issue type</label>
+              <select id="issue-category">
+                <option value="Hardware">Hardware</option>
+                <option value="Software">Software</option>
+                <option value="Browser Extension">Browser Extension</option>
+                <option value="Website Blocking">Website Blocking</option>
+                <option value="Network / Internet">Network / Internet</option>
+                <option value="Other">Other</option>
+              </select>
+            </div>
+
+            <div class="field-group">
+              <label for="issue-priority">Priority</label>
+              <select id="issue-priority">
+                <option value="Low">Low</option>
+                <option value="Medium" selected>Medium</option>
+                <option value="High">High</option>
+                <option value="Critical">Critical</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="field-group">
+            <label for="issue-description">Problem details</label>
+            <textarea id="issue-description" rows="4" placeholder="Describe the issue and how it affects your work." required></textarea>
+          </div>
+
+          <button type="submit" class="primary-btn wide">Send to admin</button>
+        </form>
+      </section>
+
+      <div class="thread-panel">
+        <div class="panel-header-row">
+          <h3>Conversation</h3>
+          <span class="tiny-label">Most recent</span>
+        </div>
+        <div id="issue-thread" class="issue-thread"></div>
+      </div>
+
+      <div class="footer-strip">
+        <span>Extension version</span>
+        <strong id="extension-version">v1.5.1</strong>
+      </div>
+
+      <div id="popup-status" class="status" aria-live="polite"></div>
+    </div>
+
+    <script src="popup.js"></script>
+  </body>
+</html>

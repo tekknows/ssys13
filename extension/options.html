@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Managed Site Guard Settings</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body class="option-page">
+    <main class="panel">
+      <h1>Managed Site Guard</h1>
+      <p class="subtle">Register this browser with the managed admin environment.</p>
+      <p class="subtle">To enforce the admin Incognito blocker, enable <strong>Allow in Incognito</strong> for this extension in your browser's extension settings.</p>
+
+      <form id="settings-form">
+        <label>
+          Supabase URL
+          <input id="supabase-url" type="url" placeholder="https://xyz.supabase.co" required />
+        </label>
+
+        <label>
+          Supabase anon key
+          <input id="supabase-anon-key" type="text" placeholder="anon key" required />
+        </label>
+
+        <label>
+          Device ID
+          <input id="device-id" type="text" placeholder="device-001" required />
+        </label>
+
+        <label>
+          Device secret
+          <input id="device-secret" type="password" placeholder="device enrollment secret" />
+        </label>
+
+        <label>
+          IT Manager email
+          <input id="it-manager-email" type="email" placeholder="it.manager@company.com" />
+        </label>
+
+        <button type="submit">Save settings</button>
+      </form>
+
+      <div id="status" class="status" aria-live="polite"></div>
+    </main>
+
+    <script src="options.js"></script>
+  </body>
+</html>

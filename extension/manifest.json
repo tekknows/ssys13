@@ -1,0 +1,38 @@
+{
+  "manifest_version": 3,
+  "name": "Managed Site Guard",
+  "version": "1.5.1",
+  "version_name": "1.5.1",
+  "description": "Website blocking and usage analytics for managed browsers.",
+  "permissions": [
+    "storage",
+    "declarativeNetRequest",
+    "alarms",
+    "runtime",
+    "webNavigation",
+    "tabs"
+  ],
+  "optional_host_permissions": [
+    "https://*/*",
+    "http://localhost/*",
+    "http://127.0.0.1/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "options_ui": {
+    "page": "options.html",
+    "open_in_tab": true
+  },
+  "incognito": "spanning",
+  "action": {
+    "default_title": "Managed Site Guard",
+    "default_popup": "popup.html"
+  },
+  "minimum_chrome_version": "120",
+  "browser_specific_settings": {
+    "edge": {
+      "minimum_version": "120"
+    }
+  }
+}

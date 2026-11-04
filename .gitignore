@@ -1,0 +1,10 @@
+# Local environment files
+.env
+.env.local
+
+# Build artifacts
+.DS_Store
+node_modules/
+
+# Logs
+*.log
