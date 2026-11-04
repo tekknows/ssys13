@@ -43,8 +43,11 @@ dashboard files at the site root.
 Choose one of these approaches:
 
 - **Vercel deployment:** use the included adapter and configure all backend
-  environment variables in the Vercel project. Ensure Vercel's project Root
-  Directory is the repository root so it deploys `api/[...path].js`.
+  environment variables in the Vercel project. Set Vercel's project Root
+  Directory to the repository root (the folder containing `package.json`,
+  `api/`, and `dashboard/`), not to `dashboard`. The root `vercel.json` sets
+  `dashboard` as the static output directory while keeping the root-level API
+  functions in the deployment.
 - **Separate backend host:** deploy the Node.js backend to a host that supports
   a persistent Node.js web service. Configure HTTPS and keep the service
   running. Its public URL will be the management API origin.
@@ -122,9 +125,10 @@ other administrators and browsers will not inherit it.
 
 ## 5. Configure and redeploy Vercel
 
-1. In Vercel, set the project **Root Directory** to the repository root so the
-   `api/` serverless function is included. Keep `dashboard` as the static output
-   directory if that matches the current deployment.
+1. In Vercel, set the project **Root Directory** to the repository root (the
+   folder containing `package.json`, `api/`, and `dashboard/`). Do not set it
+   to `dashboard`; that excludes the API function source. The root
+   `vercel.json` sets the static output directory to `dashboard`.
 2. If the dashboard is served at a custom domain, use that exact HTTPS origin
    in the backend's `ALLOWED_ORIGINS`, including the scheme and any non-default
    port. For this deployment, include `https://ssys13.vercel.app`; otherwise
