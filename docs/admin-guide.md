@@ -6,6 +6,10 @@ Use the single **Incognito blocker** toggle in the dashboard's existing Incognit
 
 Only an active administrator can change the setting. The backend stores the authoritative global value in `system_policies` under `incognito_blocking`. The legacy `incognito_control` row is retained only as a migration compatibility seed; current agents and extensions read the policy from the authenticated management API.
 
+## Register another administrator
+
+An active administrator can open **Settings → Employee Roles & Permissions → Register admin** to create another administrator account. The registration page requires the current backend admin session and sends the new password only to the backend for scrypt hashing. The first administrator cannot self-register through this page; bootstrap that account from the trusted backend host with `npm run provision:admin`.
+
 ## Windows enforcement
 
 The browser extension cannot write Windows policy. The elevated MINDLOCK agent applies these machine policies:

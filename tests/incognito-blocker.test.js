@@ -277,6 +277,19 @@ test('dashboard does not generate or persist account credentials in browser stat
   assert.match(backend, /password \? hashPassword\(password\) : null/);
 });
 
+test('administrator registration page stays separate from login and calls the protected backend route', () => {
+  const page = fs.readFileSync(path.join(__dirname, '..', 'dashboard', 'register-admin.html'), 'utf8');
+  const script = fs.readFileSync(path.join(__dirname, '..', 'dashboard', 'register-admin.js'), 'utf8');
+  const login = fs.readFileSync(path.join(__dirname, '..', 'dashboard', 'login.html'), 'utf8');
+  assert.match(page, /id="register-admin-form"/);
+  assert.doesNotMatch(page, /login\.html/);
+  assert.doesNotMatch(login, /register-admin\.html/);
+  assert.match(script, /form\.hidden = true/);
+  assert.doesNotMatch(script, /location\.replace\(['"]login\.html/);
+  assert.match(script, /\/api\/admin\/employees/);
+  assert.match(script, /Authorization:\s*`Bearer \$\{sessionStorage\.getItem\(sessionKey\)\}`/);
+});
+
 test('backend refuses privileged account creation without a supplied password', async () => {
   const originalFetch = global.fetch;
   const previousUrl = process.env.SUPABASE_URL;

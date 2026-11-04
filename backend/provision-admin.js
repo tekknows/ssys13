@@ -8,8 +8,7 @@ async function provisionAdministrator(env = process.env) {
   const password = String(env.ADMIN_PASSWORD || '');
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     throw new Error('Set ADMIN_EMAIL to a valid administrator email address.');
-  }
-  if (password.length < 8) {
+  }  if (password.length < 8) {
     throw new Error('Set ADMIN_PASSWORD to a password with at least 8 characters.');
   }
 
