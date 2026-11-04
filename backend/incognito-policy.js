@@ -1,5 +1,5 @@
 const crypto = require('node:crypto');
-const { resolveSupabaseConfig } = require('./supabase-sync');
+const { getSupabaseClient } = require('./supabase.js');
 
 const POLICY_NAME = 'incognito_blocking';
 const ADMIN_SESSION_TTL_SECONDS = 15 * 60;
@@ -12,25 +12,6 @@ function getAdminSessionSecret(env = process.env) {
   return secret;
 }
 
-async function supabaseRequest(path, { method = 'GET', body, prefer } = {}, env = process.env) {
-  const config = resolveSupabaseConfig(env);
-  const response = await fetch(`${config.url}/rest/v1/${path}`, {
-    method,
-    headers: {
-      apikey: config.serviceRoleKey,
-      Authorization: `Bearer ${config.serviceRoleKey}`,
-      'Content-Type': 'application/json',
-      ...(prefer ? { Prefer: prefer } : {}),
-    },
-    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-  });
-  const text = await response.text();
-  if (!response.ok) {
-    throw new Error(`Supabase request failed (${response.status}): ${text}`);
-  }
-  return text ? JSON.parse(text) : null;
-}
-
 function equalSecret(actual, expected) {
   const actualBytes = Buffer.from(String(actual || ''));
   const expectedBytes = Buffer.from(String(expected || ''));
@@ -41,28 +22,33 @@ function normalizeRole(value) {
   return String(value || '').trim().toLowerCase();
 }
 
-async function getAdministratorByEmail(email, env = process.env) {
+async function findAdministrator(email, env = process.env) {
   const normalizedEmail = String(email || '').trim().toLowerCase();
   if (!normalizedEmail || normalizedEmail.length > 254) return null;
 
-  const employees = await supabaseRequest(
-    `employees?email=eq.${encodeURIComponent(normalizedEmail)}&select=id,email,role,account_role,is_active&limit=1`,
-    {},
-    env
-  );
-  const employee = Array.isArray(employees) ? employees[0] : null;
-  if (!employee || employee.is_active === false) return null;
+  const client = getSupabaseClient(env);
+  const [employeeResult, credentialResult] = await Promise.all([
+    client
+      .from('employees')
+      .select('id,email,role,account_role,is_active')
+      .eq('email', normalizedEmail)
+      .limit(1)
+      .maybeSingle(),
+    client
+      .from('user_credentials')
+      .select('is_active')
+      .eq('email', normalizedEmail)
+      .limit(1)
+      .maybeSingle(),
+  ]);
+  if (employeeResult.error) throw employeeResult.error;
+  if (credentialResult.error) throw credentialResult.error;
 
-  const role = normalizeRole(employee.account_role || employee.role);
-  if (role !== 'administrator' && role !== 'admin') return null;
-  const credentials = await supabaseRequest(
-    `user_credentials?email=eq.${encodeURIComponent(normalizedEmail)}&select=is_active&limit=1`,
-    {},
-    env
-  );
-  const credential = Array.isArray(credentials) ? credentials[0] : null;
-  if (!credential || credential.is_active === false) return null;
-  return employee;
+  const employee = employeeResult.data;
+  const credential = credentialResult.data;
+  const role = normalizeRole(employee?.account_role || employee?.role);
+  if (!employee || employee.is_active === false || !credential || credential.is_active === false) return null;
+  return role === 'administrator' || role === 'admin' ? employee : null;
 }
 
 async function issueAdministratorSession(email, password, env = process.env) {
@@ -71,12 +57,13 @@ async function issueAdministratorSession(email, password, env = process.env) {
     return null;
   }
 
-  const credentials = await supabaseRequest(
-    `user_credentials?email=eq.${encodeURIComponent(normalizedEmail)}&select=email,password_hash,is_active&limit=1`,
-    {},
-    env
-  );
-  const credential = Array.isArray(credentials) ? credentials[0] : null;
+  const { data: credential, error } = await getSupabaseClient(env)
+    .from('user_credentials')
+    .select('email,password_hash,is_active')
+    .eq('email', normalizedEmail)
+    .limit(1)
+    .maybeSingle();
+  if (error) throw error;
   if (!credential || credential.is_active === false) return null;
 
   const storedPassword = String(credential.password_hash || '').trim();
@@ -85,7 +72,7 @@ async function issueAdministratorSession(email, password, env = process.env) {
     return null;
   }
 
-  const employee = await getAdministratorByEmail(normalizedEmail, env);
+  const employee = await findAdministrator(normalizedEmail, env);
   if (!employee) return null;
   const now = Math.floor(Date.now() / 1000);
   const claims = {
@@ -102,6 +89,7 @@ function verifyAdministratorSession(token, env = process.env) {
   if (typeof token !== 'string') return null;
   const [encodedClaims, signature, extra] = token.split('.');
   if (!encodedClaims || !signature || extra !== undefined) return null;
+
   const expectedSignature = crypto.createHmac('sha256', getAdminSessionSecret(env)).update(encodedClaims).digest('base64url');
   if (!equalSecret(signature, expectedSignature)) return null;
 
@@ -118,100 +106,100 @@ function verifyAdministratorSession(token, env = process.env) {
 async function authenticateAdministrator(token, env = process.env) {
   const session = verifyAdministratorSession(token, env);
   if (!session) return null;
-  const employee = await getAdministratorByEmail(session.email, env);
+  const employee = await findAdministrator(session.email, env);
   return employee ? { email: String(employee.email).trim().toLowerCase(), employeeId: employee.id } : null;
 }
 
+async function getRegisteredManagedDeviceCount(env = process.env) {
+  const { count, error } = await getSupabaseClient(env)
+    .from('devices')
+    .select('id', { count: 'exact', head: true })
+    .eq('is_registered', true)
+    .not('email', 'is', null)
+    .not('mac_address', 'is', null);
+  if (error) throw error;
+  if (!Number.isInteger(count)) {
+    throw new Error('Supabase did not return the exact registered device count.');
+  }
+  return count;
+}
+
 async function getIncognitoPolicySummary(env = process.env) {
-  const [policyRows, registeredDevices] = await Promise.all([
-    supabaseRequest(
-      `system_policies?policy_name=eq.${POLICY_NAME}&select=is_enabled,updated_at,updated_by&limit=1`,
-      {},
-      env
-    ),
+  const client = getSupabaseClient(env);
+  const [policyResult, registeredDevices] = await Promise.all([
+    client
+      .from('system_policies')
+      .select('is_enabled,updated_at,updated_by')
+      .eq('policy_name', POLICY_NAME)
+      .limit(1)
+      .maybeSingle(),
     getRegisteredManagedDeviceCount(env),
   ]);
-  if (!Array.isArray(policyRows) || !policyRows[0]) {
+  if (policyResult.error) throw policyResult.error;
+  if (!policyResult.data) {
     throw new Error(`The ${POLICY_NAME} row is missing; apply the Incognito policy migration.`);
   }
 
   return {
-    isEnabled: policyRows[0].is_enabled === true,
-    updatedAt: policyRows[0].updated_at || null,
+    isEnabled: policyResult.data.is_enabled === true,
+    updatedAt: policyResult.data.updated_at || null,
     registeredDevices,
   };
 }
 
-async function getRegisteredManagedDeviceCount(env = process.env) {
-  const config = resolveSupabaseConfig(env);
-  const url = `${config.url}/rest/v1/devices?is_registered=eq.true&email=not.is.null&mac_address=not.is.null&select=id`;
-  const response = await fetch(url, {
-    headers: {
-      apikey: config.serviceRoleKey,
-      Authorization: `Bearer ${config.serviceRoleKey}`,
-      Prefer: 'count=exact',
-      Range: '0-0',
-    },
-  });
-  if (!response.ok) {
-    const text = await response.text();
-    throw new Error(`Supabase device count failed (${response.status}): ${text}`);
-  }
-  const contentRange = response.headers.get('content-range') || '';
-  const match = /\/(\d+|\*)$/.exec(contentRange);
-  if (!match) {
-    throw new Error('Supabase did not return the exact registered device count.');
-  }
-  return match[1] === '*' ? 0 : Number(match[1]);
-}
-
 async function updateIncognitoPolicy(isEnabled, updatedBy, env = process.env) {
-  await supabaseRequest('rpc/set_incognito_blocking_policy', {
-    method: 'POST',
-    body: {
-      p_is_enabled: Boolean(isEnabled),
-      p_updated_by: String(updatedBy || '').trim().toLowerCase(),
-    },
-  }, env);
+  const { error } = await getSupabaseClient(env).rpc('set_incognito_blocking_policy', {
+    p_is_enabled: Boolean(isEnabled),
+    p_updated_by: String(updatedBy || '').trim().toLowerCase(),
+  });
+  if (error) throw error;
   return getIncognitoPolicySummary(env);
 }
 
 async function authenticateAgent(deviceId, token, env = process.env) {
   const normalizedDeviceId = String(deviceId || '').trim();
   if (!normalizedDeviceId || normalizedDeviceId.length > 128 || !token) return false;
-  const credentialRows = await supabaseRequest(
-    `device_agent_credentials?device_id=eq.${encodeURIComponent(normalizedDeviceId)}&select=token_hash,is_active&limit=1`,
-    {},
-    env
-  );
-  const credential = Array.isArray(credentialRows) ? credentialRows[0] : null;
+
+  const client = getSupabaseClient(env);
+  const credentialResult = await client
+    .from('device_agent_credentials')
+    .select('token_hash,is_active')
+    .eq('device_id', normalizedDeviceId)
+    .limit(1)
+    .maybeSingle();
+  if (credentialResult.error) throw credentialResult.error;
+  const credential = credentialResult.data;
   if (!credential || credential.is_active !== true) return false;
 
   const actualHash = crypto.createHash('sha256').update(String(token), 'utf8').digest('hex');
   if (!equalSecret(credential.token_hash, actualHash)) return false;
 
-  const devices = await supabaseRequest(
-    `devices?id=eq.${encodeURIComponent(normalizedDeviceId)}&select=id,is_registered,email,mac_address&limit=1`,
-    {},
-    env
-  );
-  const device = Array.isArray(devices) ? devices[0] : null;
+  const deviceResult = await client
+    .from('devices')
+    .select('id,is_registered,email,mac_address')
+    .eq('id', normalizedDeviceId)
+    .limit(1)
+    .maybeSingle();
+  if (deviceResult.error) throw deviceResult.error;
+  const device = deviceResult.data;
   return Boolean(device && device.is_registered === true && device.email && device.mac_address);
 }
 
 async function getAgentIncognitoPolicy(env = process.env) {
-  const rows = await supabaseRequest(
-    `system_policies?policy_name=eq.${POLICY_NAME}&select=is_enabled,updated_at&limit=1`,
-    {},
-    env
-  );
-  if (!Array.isArray(rows) || !rows[0]) {
+  const { data, error } = await getSupabaseClient(env)
+    .from('system_policies')
+    .select('is_enabled,updated_at')
+    .eq('policy_name', POLICY_NAME)
+    .limit(1)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) {
     throw new Error(`The ${POLICY_NAME} row is missing; apply the Incognito policy migration.`);
   }
   return {
     policyName: POLICY_NAME,
-    isEnabled: rows[0].is_enabled === true,
-    updatedAt: rows[0].updated_at || null,
+    isEnabled: data.is_enabled === true,
+    updatedAt: data.updated_at || null,
   };
 }
 
@@ -226,7 +214,6 @@ module.exports = {
   getIncognitoPolicySummary,
   getRegisteredManagedDeviceCount,
   issueAdministratorSession,
-  supabaseRequest,
   updateIncognitoPolicy,
   verifyAdministratorSession,
 };

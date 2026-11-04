@@ -25,7 +25,7 @@ flowchart LR
 
 - **`dashboard/`** — Static HTML, CSS, and JavaScript for admin workflows and local fallback storage. `app.js` maps dashboard fields to Supabase columns, hydrates records, and manages settings and update logs.
 - **`extension/`** — Manifest V3 extension. `background.js` refreshes and enforces blocking policies; `popup.html` and `popup.js` show endpoint information and collect employee issue reports; `options.html` configures Supabase and device details.
-- **`backend/`** — Node.js API that batches dashboard state writes using a server-only Supabase service-role key.
+- **`backend/`** — Node.js API using the installed `@supabase/supabase-js` client with a server-only service-role key. `backend/supabase.js` owns the shared client; backend files use CommonJS imports to match the existing project module format.
 - **`windows-agent/`** — Elevated startup agent that polls the global policy, applies and verifies Chrome/Edge registry values, and restores prior values when disabled.
 - **`supabase/migrations/`** — Database migrations for centralized policy state and protected per-device agent credentials.
 - **`docs/`** — Setup, deployment, and administrator guidance.

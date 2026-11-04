@@ -39,7 +39,9 @@ test('administrator sessions require a valid password and administrator role', a
   global.fetch = async (url) => {
     const parsedUrl = new URL(url);
     if (parsedUrl.pathname.endsWith('/user_credentials')) {
-      return response([{ email: 'admin@example.com', password_hash: sha256(password), is_active: true }]);
+      return response(parsedUrl.searchParams.get('select').includes('password_hash')
+        ? [{ email: 'admin@example.com', password_hash: sha256(password), is_active: true }]
+        : [{ is_active: true }]);
     }
     if (parsedUrl.pathname.endsWith('/employees')) {
       return response([{ id: 'employee-1', email: 'admin@example.com', account_role: role, is_active: true }]);
@@ -70,8 +72,8 @@ test('global policy update uses the singleton policy and counts registered manag
     if (parsedUrl.pathname.endsWith('/system_policies')) {
       return response([{ is_enabled: true, updated_at: '2026-11-04T00:00:00.000Z', updated_by: 'admin@example.com' }]);
     }
-    if (parsedUrl.pathname.endsWith('/devices')) {
-      return response([{ id: 'dev-1' }], 200, { 'content-range': '0-0/2' });
+    if (parsedUrl.pathname.endsWith('/devices') && options.method === 'HEAD') {
+      return response(null, 200, { 'content-range': '*/2' });
     }
     throw new Error(`Unexpected request ${parsedUrl.pathname}`);
   };

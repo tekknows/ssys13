@@ -1,5 +1,6 @@
 const http = require('node:http');
 const { resolveSupabaseConfig, createSyncRequestPayload } = require('./supabase-sync');
+const { supabase } = require('./supabase.js');
 const {
   authenticateAdministrator,
   authenticateAgent,
@@ -41,40 +42,26 @@ function getRequestBody(req) {
   });
 }
 
-async function upsertTable(config, tableName, rows) {
+async function upsertTable(tableName, rows) {
   const records = Array.isArray(rows) ? rows.filter(Boolean) : [];
   if (!records.length) {
     return { tableName, upserted: 0 };
   }
 
   const conflictKey = records.some((row) => row && row.email) ? 'email' : 'id';
-  const url = `${config.url}/rest/v1/${tableName}?on_conflict=${encodeURIComponent(conflictKey)}`;
-
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: {
-      apikey: config.serviceRoleKey,
-      Authorization: `Bearer ${config.serviceRoleKey}`,
-      'Content-Type': 'application/json',
-      Prefer: 'resolution=merge-duplicates',
-    },
-    body: JSON.stringify(records),
-  });
-
-  const text = await response.text();
-  if (!response.ok) {
-    throw new Error(`Supabase write failed for ${tableName}: ${response.status} ${text}`);
+  const { error } = await supabase.from(tableName).upsert(records, { onConflict: conflictKey });
+  if (error) {
+    throw new Error(`Supabase write failed for ${tableName}: ${error.message}`);
   }
 
   return {
     tableName,
     upserted: records.length,
-    raw: text,
   };
 }
 
 async function syncStateToSupabase(state) {
-  const config = resolveSupabaseConfig(process.env);
+  resolveSupabaseConfig(process.env);
   const payload = createSyncRequestPayload(state);
 
   const tableNames = [
@@ -97,10 +84,10 @@ async function syncStateToSupabase(state) {
   for (const tableName of tableNames) {
     const rows = payload[tableName] ?? [];
     if (Array.isArray(rows) && rows.length) {
-      const result = await upsertTable(config, tableName, rows);
+      const result = await upsertTable(tableName, rows);
       results.push(result);
     } else if (rows && typeof rows === 'object') {
-      const result = await upsertTable(config, tableName, [rows]);
+      const result = await upsertTable(tableName, [rows]);
       results.push(result);
     }
   }

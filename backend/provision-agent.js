@@ -1,5 +1,5 @@
 const crypto = require('node:crypto');
-const { resolveSupabaseConfig } = require('./supabase-sync');
+const { getSupabaseClient } = require('./supabase.js');
 
 async function provisionAgent(deviceId, env = process.env) {
   const normalizedDeviceId = String(deviceId || '').trim();
@@ -7,48 +7,30 @@ async function provisionAgent(deviceId, env = process.env) {
     throw new Error('Provide the id of a registered, managed device.');
   }
 
-  const config = resolveSupabaseConfig(env);
-  const deviceUrl = new URL('/rest/v1/devices', config.url);
-  deviceUrl.searchParams.set('id', `eq.${normalizedDeviceId}`);
-  deviceUrl.searchParams.set('select', 'id,is_registered,email,mac_address');
-  deviceUrl.searchParams.set('limit', '1');
-  const deviceResponse = await fetch(deviceUrl, {
-    headers: {
-      apikey: config.serviceRoleKey,
-      Authorization: `Bearer ${config.serviceRoleKey}`,
-    },
-  });
-  if (!deviceResponse.ok) {
-    throw new Error(`Could not verify the registered device (${deviceResponse.status}).`);
-  }
-  const devices = await deviceResponse.json();
-  const device = Array.isArray(devices) ? devices[0] : null;
+  const client = getSupabaseClient(env);
+  const { data: device, error: deviceError } = await client
+    .from('devices')
+    .select('id,is_registered,email,mac_address')
+    .eq('id', normalizedDeviceId)
+    .limit(1)
+    .maybeSingle();
+  if (deviceError) throw new Error(`Could not verify the registered device: ${deviceError.message}`);
   if (!device || device.is_registered !== true || !device.email || !device.mac_address) {
     throw new Error('The device must be registered and assigned before provisioning an agent.');
   }
 
   const token = crypto.randomBytes(32).toString('base64url');
   const tokenHash = crypto.createHash('sha256').update(token, 'utf8').digest('hex');
-  const credentialUrl = new URL('/rest/v1/device_agent_credentials', config.url);
-  credentialUrl.searchParams.set('on_conflict', 'device_id');
-  const credentialResponse = await fetch(credentialUrl, {
-    method: 'POST',
-    headers: {
-      apikey: config.serviceRoleKey,
-      Authorization: `Bearer ${config.serviceRoleKey}`,
-      'Content-Type': 'application/json',
-      Prefer: 'resolution=merge-duplicates',
-    },
-    body: JSON.stringify({
+  const { error: credentialError } = await client
+    .from('device_agent_credentials')
+    .upsert({
       device_id: String(device.id),
       token_hash: tokenHash,
       is_active: true,
       updated_at: new Date().toISOString(),
-    }),
-  });
-  if (!credentialResponse.ok) {
-    const detail = await credentialResponse.text();
-    throw new Error(`Could not store the agent credential (${credentialResponse.status}): ${detail}`);
+    }, { onConflict: 'device_id' });
+  if (credentialError) {
+    throw new Error(`Could not store the agent credential: ${credentialError.message}`);
   }
 
   return {
