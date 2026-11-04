@@ -28,9 +28,9 @@ const storedApiBaseUrl = (() => {
   }
 })();
 
-window.__APP_CONFIG__.supabaseUrl = envUrl || storedUrl || 'https://uwjsmxvdsdozzimukael.supabase.co';
-window.__APP_CONFIG__.supabaseAnonKey = envAnonKey || storedAnonKey || 'sb_publishable_BU7kYL8KZuFAa06SglHykw_6U1044Ud';
-window.__APP_CONFIG__.apiBaseUrl = envApiBaseUrl || storedApiBaseUrl || '/api/supabase-sync';
+window.__APP_CONFIG__.supabaseUrl = envUrl || storedUrl || 'https://owuottmockghwcysnfig.supabase.co';
+window.__APP_CONFIG__.supabaseAnonKey = envAnonKey || storedAnonKey || 'sb_publishable_dLvhzyFjokO9E6BnMsvblg_MmLaNNaR';
+window.__APP_CONFIG__.apiBaseUrl = envApiBaseUrl || storedApiBaseUrl || 'http://localhost:3000/api/supabase-sync';
 window.__APP_CONFIG__.serverSyncUrl = window.__APP_CONFIG__.apiBaseUrl;
 
 window.__APP_CONFIG__.validateSupabaseConfig = function validateSupabaseConfig() {

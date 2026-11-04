@@ -1,6 +1,6 @@
 const DEFAULTS = {
-  supabaseUrl: '',
-  supabaseAnonKey: '',
+  supabaseUrl: 'https://owuottmockghwcysnfig.supabase.co',
+  supabaseAnonKey: 'sb_publishable_dLvhzyFjokO9E6BnMsvblg_MmLaNNaR',
   deviceId: '',
   deviceSecret: '',
   itManagerEmail: '',
@@ -16,8 +16,8 @@ function updateStatus(message, isError = false) {
 
 async function loadSettings() {
   const data = await chrome.storage.local.get(Object.keys(DEFAULTS));
-  document.getElementById('supabase-url').value = data.supabaseUrl || '';
-  document.getElementById('supabase-anon-key').value = data.supabaseAnonKey || '';
+  document.getElementById('supabase-url').value = data.supabaseUrl || DEFAULTS.supabaseUrl;
+  document.getElementById('supabase-anon-key').value = data.supabaseAnonKey || DEFAULTS.supabaseAnonKey;
   document.getElementById('device-id').value = data.deviceId || '';
   document.getElementById('device-secret').value = data.deviceSecret || '';
   document.getElementById('it-manager-email').value = data.itManagerEmail || '';

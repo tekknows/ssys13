@@ -75,6 +75,8 @@ PORT=3000
 
 Generate a signing secret with `node -e "console.log(require('node:crypto').randomBytes(48).toString('base64url'))"`. Set `ALLOWED_ORIGINS` to the exact dashboard origins; install dependencies with `npm install`, then start the API with `npm run start:backend`. Keep both secrets server-side. The API validates the administrator password and role against Supabase, issues a short-lived signed session, and rechecks the administrator role for protected operations. Deploy the API behind HTTPS and a rate-limiting reverse proxy; never expose the service-role key.
 
+For local development, the backend loads `.env.local` when present; that file is ignored by Git. The dashboard and extension use the public publishable key only. Never copy `SUPABASE_SECRET_KEY` into dashboard or extension code.
+
 ### Windows management agent
 
 For each registered and assigned laptop, provision one per-device token on the backend host with `node backend/provision-agent.js <device-row-id>`. Deliver the one-time token to the target laptop through an approved secure channel. From an elevated PowerShell session in `windows-agent/`, run `.\Install-Mindlock-PolicyAgent.ps1 -ApiBaseUrl https://your-management-api.example -DeviceId <device-row-id>` and enter the token at the secure prompt. The installer stores it in an ACL-protected ProgramData file and creates a SYSTEM startup task.

@@ -1,6 +1,6 @@
 function resolveSupabaseConfig(env = process.env) {
   const url = String(env.SUPABASE_URL || env.VITE_SUPABASE_URL || '').trim();
-  const serviceRoleKey = String(env.SUPABASE_SERVICE_ROLE_KEY || env.SUPABASE_SERVICE_ROLE || '').trim();
+  const serviceRoleKey = String(env.SUPABASE_SECRET_KEY || env.SUPABASE_SERVICE_ROLE_KEY || env.SUPABASE_SERVICE_ROLE || '').trim();
   const apiBaseUrl = String(env.API_BASE_URL || env.VITE_API_BASE_URL || '/api/supabase-sync').trim();
 
   if (!url) {
@@ -8,7 +8,7 @@ function resolveSupabaseConfig(env = process.env) {
   }
 
   if (!serviceRoleKey) {
-    throw new Error('SUPABASE_SERVICE_ROLE_KEY is required for secure backend writes.');
+    throw new Error('SUPABASE_SECRET_KEY or SUPABASE_SERVICE_ROLE_KEY is required for secure backend writes.');
   }
 
   return {
