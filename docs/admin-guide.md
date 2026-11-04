@@ -15,7 +15,7 @@ The browser extension cannot write Windows policy. The elevated MINDLOCK agent a
 
 Value `1` disables Incognito/InPrivate; value `0` allows it. On disable, the agent restores prior values only when the current value still matches the value MINDLOCK applied. This leaves unrelated policy values untouched. Existing browsers may need a restart to refresh policy.
 
-The agent polls the backend after startup and periodically while connected. An offline device keeps its last applied registry state and retrieves the latest global value when it reconnects. A newly registered laptop is covered after it is assigned, provisioned with a per-device token, and the agent first connects.
+The agent polls the backend after startup and periodically while connected. Successful authenticated polls update the existing laptop `last_sync` timestamp for the normal Online/Offline connection monitor; Incognito policy state remains separate. An offline device keeps its last applied registry state and retrieves the latest global value when it reconnects. A newly registered laptop is covered after it is assigned, provisioned with a per-device token, and the agent first connects.
 
 ## Verification
 

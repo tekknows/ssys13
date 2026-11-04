@@ -663,6 +663,25 @@
                     <button id="open-changelog-modal" class="version-badge" type="button" aria-label="Open update log">v1.5.1</button>
                   </div>
 
+                  <div class="setting-item retention-setting">
+                    <div>
+                      <h3>Update log retention</h3>
+                      <p>Automatically remove update-log entries older than the selected period. Set days to 0 to keep entries indefinitely.</p>
+                      <p id="changelog-retention-status" role="status" aria-live="polite"></p>
+                    </div>
+                    <div class="retention-controls">
+                      <label class="retention-field">
+                        <span>Days</span>
+                        <input id="changelog-retention-days" type="number" min="0" max="36500" step="1" value="365" />
+                      </label>
+                      <label class="checkbox-inline">
+                        <input id="changelog-auto-cleanup-enabled" type="checkbox" checked />
+                        <span>Auto cleanup</span>
+                      </label>
+                      <button id="changelog-run-cleanup" class="secondary-button" type="button">Clean up now</button>
+                    </div>
+                  </div>
+
                   <div class="settings-actions">
                     <button id="general-settings-save" type="button" class="primary-button">Save</button>
                   </div>
@@ -1194,7 +1213,7 @@
               Login password
               <div class="password-input-wrap role-assignment-password-wrap" style="gap: 0.5rem;">
                 <div class="role-assignment-password-field">
-                  <input id="role-assignment-password" type="password" class="field-input" placeholder="Generate or enter a password" />
+                  <input id="role-assignment-password" type="password" class="field-input" placeholder="Set a password for this account" />
                   <button id="toggle-role-assignment-password" class="password-toggle" type="button" aria-label="Show password" aria-pressed="false" data-visible="false">
                     <svg class="password-icon eye-open" viewBox="0 0 24 24" aria-hidden="true">
                       <path d="M1.5 12S5.1 5.25 12 5.25 22.5 12 22.5 12 18.9 18.75 12 18.75 1.5 12 1.5 12Z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
@@ -1207,7 +1226,6 @@
                     </svg>
                   </button>
                 </div>
-                <button type="button" id="generate-role-assignment-password" class="secondary-button small-button">Generate</button>
               </div>
             </label>
           </div>
@@ -1373,7 +1391,6 @@
                   </svg>
                 </button>
               </div>
-              <button type="button" id="generate-employee-password" class="secondary-button small-button">Generate</button>
             </div>
           </label>
 

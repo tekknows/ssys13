@@ -2,9 +2,9 @@
 
 ## Local testing
 
-1. Use the existing MINDLOCK Supabase project and confirm that the `devices`, `incognito_control`, `employees`, `user_credentials`, and `employee_permissions` tables are present.
-2. Run [`supabase/migrations/20261104172000_incognito_blocking.sql`](../supabase/migrations/20261104172000_incognito_blocking.sql) in the Supabase SQL editor.
-3. Configure `SUPABASE_URL`, `SUPABASE_SECRET_KEY`, a unique `ADMIN_SESSION_SECRET` (at least 32 characters), and exact dashboard origins in `ALLOWED_ORIGINS` in the backend environment. Keep the Supabase secret key and signing secret on the backend only.
+1. Back up the existing MINDLOCK Supabase project and inspect any existing tables with the same names.
+2. Run [`supabase/migrations/20261104160000_system_backend.sql`](../supabase/migrations/20261104160000_system_backend.sql), [`supabase/migrations/20261104172000_incognito_blocking.sql`](../supabase/migrations/20261104172000_incognito_blocking.sql), and [`supabase/migrations/20261106120000_changelog_retention.sql`](../supabase/migrations/20261106120000_changelog_retention.sql), in the Supabase SQL editor.
+3. Configure `SUPABASE_URL`, `SUPABASE_SECRET_KEY`, a unique `ADMIN_SESSION_SECRET` (at least 32 characters), and exact dashboard/extension origins in `ALLOWED_ORIGINS` in the backend environment. Keep the Supabase secret key and signing secret on the backend only.
 4. Serve the dashboard locally:
 
    ```bash

@@ -10,26 +10,8 @@ values (1, false)
 on conflict (id) do nothing;
 
 alter table public.incognito_control enable row level security;
-revoke insert, update, delete on public.incognito_control from public, anon, authenticated;
-grant select on public.incognito_control to anon, authenticated, service_role;
-
-do $$
-begin
-  if not exists (
-    select 1
-    from pg_policies
-    where schemaname = 'public'
-      and tablename = 'incognito_control'
-      and policyname = 'incognito_control_public_read'
-  ) then
-    create policy incognito_control_public_read
-      on public.incognito_control
-      for select
-      to anon, authenticated
-      using (true);
-  end if;
-end;
-$$;
+revoke all on public.incognito_control from public, anon, authenticated;
+grant select, insert, update, delete on public.incognito_control to service_role;
 
 create table if not exists public.system_policies (
   id uuid primary key default gen_random_uuid(),

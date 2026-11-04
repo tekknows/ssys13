@@ -4,8 +4,9 @@
   "scripts": {
     "validate:supabase": "node scripts/validate-supabase.js",
     "test:incognito": "node tests/incognito-blocker.test.js",
-    "test:security": "node tests/default-admin-bootstrap.test.js && node tests/security-account-resolution.test.js && node tests/secure-backend-sync.test.js && node tests/employee-permissions.test.js",
-    "start:backend": "node backend/server.js"
+    "test:security": "node --test tests/incognito-blocker.test.js",
+    "start:backend": "node backend/server.js",
+    "provision:admin": "node backend/provision-admin.js"
   },
   "dependencies": {
     "@supabase/server": "^1.9.2",

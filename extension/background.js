@@ -121,13 +121,19 @@ function buildRuleForDomain(domain, ruleId) {
 }
 
 async function getConfig() {
-  const result = await chrome.storage.local.get(['supabaseUrl', 'supabaseAnonKey', 'deviceId', 'deviceSecret']);
+  const result = await chrome.storage.local.get(['supabaseUrl', 'supabaseAnonKey', 'apiBaseUrl', 'deviceId', 'deviceSecret']);
   return {
     supabaseUrl: result.supabaseUrl || '',
     supabaseAnonKey: result.supabaseAnonKey || '',
+    apiBaseUrl: String(result.apiBaseUrl || '').replace(/\/+$/, ''),
     deviceId: result.deviceId || '',
     deviceSecret: result.deviceSecret || '',
   };
+}
+
+function getManagementApiUrl(config, path) {
+  if (!config.apiBaseUrl) throw new Error('Configure the MINDLOCK management API URL in extension settings.');
+  return new URL(path, `${config.apiBaseUrl}/`).toString();
 }
 
 function shouldCloseIncognitoTab(tab, enabled, incognitoAccessAllowed) {
@@ -175,27 +181,24 @@ async function closeOpenIncognitoTabs() {
 }
 
 async function syncIncognitoControl(config, closeExistingTabs = true) {
-  if (!config.supabaseUrl || !config.supabaseAnonKey) return false;
+  if (!isDeviceRegisteredForBlocking(config)) return false;
 
   try {
-    const endpoint = new URL('/rest/v1/incognito_control?id=eq.1&select=enabled', config.supabaseUrl);
-    const response = await fetch(
-      endpoint,
-      {
-        method: 'GET',
-        headers: {
-          apikey: config.supabaseAnonKey,
-          Authorization: `Bearer ${config.supabaseAnonKey}`,
-        },
-        cache: 'no-store',
-      }
-    );
+    const deviceId = encodeURIComponent(config.deviceId);
+    const response = await fetch(getManagementApiUrl(config, `/api/agent/incognito-policy?deviceId=${deviceId}`), {
+      method: 'GET',
+      headers: { Authorization: `Bearer ${config.deviceSecret}` },
+      cache: 'no-store',
+    });
     if (!response.ok) {
       throw new Error(`Incognito control sync failed with status ${response.status}`);
     }
 
-    const rows = await response.json();
-    const enabled = Array.isArray(rows) && rows.length > 0 && rows[0].enabled === true;
+    const payload = await response.json();
+    if (payload.policyName !== 'incognito_blocking' || typeof payload.isEnabled !== 'boolean') {
+      throw new Error('The management API returned an invalid Incognito policy.');
+    }
+    const enabled = payload.isEnabled;
     const incognitoAccessAllowed = await isIncognitoAccessAllowed();
     await chrome.storage.local.set({
       [STORAGE_KEY.incognitoBlockingEnabled]: enabled,
@@ -218,7 +221,6 @@ async function syncIncognitoControl(config, closeExistingTabs = true) {
     return false;
   }
 }
-
 function isDeviceRegisteredForBlocking(config) {
   return Boolean(config.deviceId && config.deviceSecret && config.deviceId.trim() && config.deviceSecret.trim());
 }
@@ -299,46 +301,37 @@ async function syncPolicies() {
     return { ok: false, mode: 'unregistered' };
   }
 
-  if (!config.supabaseUrl || !config.supabaseAnonKey) {
-    await chrome.storage.local.set({ [STORAGE_KEY.policies]: DEMO_POLICIES });
-    await applyPoliciesToBrowser();
-    await chrome.storage.local.set({ [STORAGE_KEY.lastError]: 'Demo mode active; no Supabase credentials configured.' });
-    return { ok: true, mode: 'demo' };
-  }
-
   try {
-    const headers = {
-      'Content-Type': 'application/json',
-      apikey: config.supabaseAnonKey,
-    };
-
     const response = await fetch(
-      `${config.supabaseUrl}/rest/v1/blocking_policies?device_id=eq.${encodeURIComponent(deviceId)}&select=*&order=version.desc`,
-      { method: 'GET', headers }
+      getManagementApiUrl(config, `/api/agent/blocking-policies?deviceId=${encodeURIComponent(deviceId)}`),
+      {
+        method: 'GET',
+        headers: { Authorization: `Bearer ${config.deviceSecret}` },
+        cache: 'no-store',
+      }
     );
 
     if (!response.ok) {
-      throw new Error(`Supabase request failed with status ${response.status}`);
+      throw new Error(`Management API policy sync failed with status ${response.status}`);
     }
 
-    const assignedPolicies = await response.json();
-    const normalizedPolicies = Array.isArray(assignedPolicies) && assignedPolicies.length > 0
-      ? assignedPolicies.map((policy) => ({
+    const payload = await response.json();
+    const assignedPolicies = Array.isArray(payload.policies) ? payload.policies : [];
+    const normalizedPolicies = assignedPolicies.map((policy) => ({
           id: policy.id,
           name: policy.name || 'Policy',
-          enabled: Boolean(policy.enabled),
+          enabled: Boolean(policy.enabled ?? policy.is_enabled),
           domains: Array.isArray(policy.domains) ? policy.domains : [],
           schedule: policy.schedule || { days: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'], start: '09:00', end: '17:00' },
           version: policy.version || 1,
           deviceId,
-        }))
-      : DEMO_POLICIES;
+        }));
 
     await chrome.storage.local.set({ [STORAGE_KEY.policies]: normalizedPolicies });
     await applyPoliciesToBrowser();
     await chrome.storage.local.set({ [STORAGE_KEY.lastError]: null });
 
-    return { ok: true, mode: 'supabase' };
+    return { ok: true, mode: 'backend' };
   } catch (error) {
     await chrome.storage.local.set({ [STORAGE_KEY.lastError]: String(error.message || error) });
     return { ok: false, mode: 'offline' };
@@ -357,18 +350,18 @@ async function flushUsageQueue() {
   const result = await chrome.storage.local.get([STORAGE_KEY.usageQueue]);
   const queue = Array.isArray(result[STORAGE_KEY.usageQueue]) ? result[STORAGE_KEY.usageQueue] : [];
 
-  if (!queue.length || !config.supabaseUrl || !config.supabaseAnonKey) {
+  if (!queue.length || !config.apiBaseUrl || !config.deviceId || !config.deviceSecret) {
     return;
   }
 
   try {
-    const response = await fetch(`${config.supabaseUrl}/rest/v1/usage_events`, {
+    const response = await fetch(getManagementApiUrl(config, '/api/agent/usage-events'), {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        apikey: config.supabaseAnonKey,
+        Authorization: `Bearer ${config.deviceSecret}`,
       },
-      body: JSON.stringify(queue),
+      body: JSON.stringify({ deviceId: config.deviceId, events: queue }),
     });
 
     if (!response.ok) {
@@ -408,7 +401,7 @@ chrome.storage.onChanged.addListener(async (changes, areaName) => {
     await applyPoliciesToBrowser();
   }
 
-  const configurationChanged = ['supabaseUrl', 'supabaseAnonKey', 'deviceId', 'deviceSecret']
+  const configurationChanged = ['supabaseUrl', 'supabaseAnonKey', 'apiBaseUrl', 'deviceId', 'deviceSecret']
     .some((key) => changes[key]);
   if (configurationChanged) {
     await syncPolicies();

@@ -2,15 +2,14 @@ const STORAGE_KEY = 'site-blocker-admin-demo';
 const LOGIN_STORAGE_KEY = 'site-blocker-admin-auth';
 const AUTH_SESSION_KEY = 'site-blocker-admin-session';
 const CHANGELOG_SESSION_KEY = 'site-blocker-changelog-session';
+let changelogCleanupRunning = false;
+let lastChangelogCleanupAttemptDate = '';
 const THEME_STORAGE_KEY = 'site-blocker-admin-theme';
 const LOGIN_THEME_STORAGE_KEY = 'site-blocker-login-theme';
 const SHARED_TICKETS_KEY = 'mindlock-shared-tickets';
 const DEFAULT_ACCENT_COLOR = '#555555';
-const DEFAULT_ADMIN_EMAIL = 'admin@sys13.com';
-const DEFAULT_ADMIN_PASSWORD = 'admin123';
 const APP_VERSION = 'v1.5.1';
 const APP_RELEASE_DATE = '2026-11-04';
-const MAX_CHANGELOG_ENTRIES = 20;
 const DEFAULT_SYNC_IDS = {
   settings: '10000000-0000-4000-8000-000000000001',
   analyticsSnapshot: '10000000-0000-4000-8000-000000000002',
@@ -31,6 +30,8 @@ const demoState = {
     retentionDate: '2026-10-01',
     accentColor: DEFAULT_ACCENT_COLOR,
     ticketRetentionDays: 3,
+    changelogRetentionDays: 365,
+    changelogAutoCleanupEnabled: true,
   },
   tickets: [],
   policies: [],
@@ -183,6 +184,8 @@ const FRONTEND_TO_BACKEND_FIELD_MAP = {
     accentColor: 'accent_color',
     ticketRetentionDays: 'ticket_retention_days',
     disposalRetentionDays: 'disposal_retention_days',
+    changelogRetentionDays: 'changelog_retention_days',
+    changelogAutoCleanupEnabled: 'changelog_auto_cleanup_enabled',
     features: 'features',
   },
   employees: {
@@ -256,7 +259,11 @@ function remapFields(value, mapping, direction = 'toBackend') {
   if (typeof value !== 'object') return value;
 
   const result = {};
-  const entries = Object.entries(value);
+  const flattenedValue = value.data && typeof value.data === 'object' && !Array.isArray(value.data)
+    ? { ...value.data, ...value }
+    : { ...value };
+  delete flattenedValue.data;
+  const entries = Object.entries(flattenedValue);
 
   entries.forEach(([key, entryValue]) => {
     const targetKey = direction === 'toBackend' ? (mapping[key] || key) : (BACKEND_TO_FRONTEND_FIELD_MAP[key] || key);
@@ -329,6 +336,7 @@ function mapBackendStateToFrontend(payload) {
   const tableGroups = [
     ['settings', source.settings, FRONTEND_TO_BACKEND_FIELD_MAP.settings],
     ['employees', source.employees, FRONTEND_TO_BACKEND_FIELD_MAP.employees],
+    ['employeePermissions', source.employee_permissions, {}],
     ['devices', source.devices, FRONTEND_TO_BACKEND_FIELD_MAP.devices],
     ['replacements', source.replacements, FRONTEND_TO_BACKEND_FIELD_MAP.replacements],
     ['policies', source.policies, FRONTEND_TO_BACKEND_FIELD_MAP.policies],
@@ -354,7 +362,7 @@ function mapBackendStateToFrontend(payload) {
   }
 
   if (source.notifications && Array.isArray(source.notifications)) {
-    mapped.notifications = source.notifications.map((entry) => ({ ...entry }));
+    mapped.notifications = source.notifications.map((entry) => remapFields(entry, {}, 'fromBackend'));
   }
 
   return mapped;
@@ -427,13 +435,6 @@ function isPrivilegedAccountRole(roleName) {
   return normalized === 'Administrator' || normalized === 'Admin' || normalized === 'IT Staff';
 }
 
-function generateTemporaryEmployeePassword() {
-  const prefix = 'Sys13';
-  const suffix = Math.random().toString(36).slice(2, 8).toUpperCase();
-  const number = String(Math.floor(100 + Math.random() * 900));
-  return `${prefix}-${suffix}${number}!`;
-}
-
 function normalizeEmployeeRoles() {
   if (!Array.isArray(state.employees)) return;
   state.employees = state.employees.map((employee) => {
@@ -448,24 +449,6 @@ function normalizeEmployeeRoles() {
       accountRole,
     };
   });
-}
-
-function secureHashString(value) {
-  const text = String(value || '');
-  if (!text) return '';
-
-  if (window.crypto && window.crypto.subtle) {
-    const bytes = new TextEncoder().encode(text);
-    return window.crypto.subtle.digest('SHA-256', bytes).then((buffer) =>
-      Array.from(new Uint8Array(buffer)).map((byte) => byte.toString(16).padStart(2, '0')).join('')
-    );
-  }
-
-  let hash = 0;
-  for (let index = 0; index < text.length; index += 1) {
-    hash = (hash * 31 + text.charCodeAt(index)) >>> 0;
-  }
-  return Promise.resolve(hash.toString(16).padStart(8, '0'));
 }
 
 function buildEmployeePermissionRecord({
@@ -502,78 +485,17 @@ function resolvePermissionState(permissionRecord = {}) {
 }
 
 async function hydrateEmployeePermissionsFromSupabase() {
-  const client = getSupabaseClient();
-  if (!client) {
-    state.employeePermissions = [];
-    return [];
-  }
-
-  try {
-    const { data, error } = await client
-      .from('employee_permissions')
-      .select('*');
-
-    if (error) {
-      throw error;
-    }
-
-    state.employeePermissions = Array.isArray(data) ? data : [];
-    return state.employeePermissions;
-  } catch (error) {
-    console.warn('Unable to load employee permissions from Supabase.', error);
-    state.employeePermissions = [];
-    return [];
-  }
+  state.employeePermissions = Array.isArray(state.employeePermissions) ? state.employeePermissions : [];
+  return state.employeePermissions;
 }
 
 async function getEmployeePermissionRecord(employeeId) {
-  const client = getSupabaseClient();
-  if (!client || !employeeId) return null;
-
-  try {
-    const { data, error } = await client
-      .from('employee_permissions')
-      .select('*')
-      .eq('employee_id', employeeId)
-      .maybeSingle();
-
-    if (error && error.code !== 'PGRST116') {
-      throw error;
-    }
-
-    return data || null;
-  } catch (error) {
-    console.warn('Unable to look up employee permission.', error);
-    return null;
-  }
+  return state.employeePermissions.find((permission) => permission.employee_id === employeeId) || null;
 }
 
 async function getCurrentUserEmployeeRecord() {
-  const client = getSupabaseClient();
-  if (!client) return null;
-
-  try {
-    const sessionUser = getCurrentSessionUser();
-    const email = String(sessionUser?.email || '').trim().toLowerCase();
-    if (!email) {
-      return null;
-    }
-
-    const { data, error } = await client
-      .from('employees')
-      .select('id, email, auth_user_id, role, account_role, is_active')
-      .eq('email', email)
-      .maybeSingle();
-
-    if (error && error.code !== 'PGRST116') {
-      throw error;
-    }
-
-    return data || null;
-  } catch (error) {
-    console.warn('Unable to load the current employee profile.', error);
-    return null;
-  }
+  const email = String(getCurrentSessionUser()?.email || '').trim().toLowerCase();
+  return state.employees.find((employee) => String(employee.email || '').trim().toLowerCase() === email) || null;
 }
 
 async function currentSessionHasAdminAccessPermission() {
@@ -591,16 +513,6 @@ async function currentSessionHasAdminAccessPermission() {
 }
 
 async function updateEmployeeAdminAccessPermission(employeeId, canAccessAdmin) {
-  const client = getSupabaseClient();
-  if (!client || !employeeId) {
-    throw new Error('No active Supabase session or employee was selected.');
-  }
-
-  const currentEmployee = await getCurrentUserEmployeeRecord();
-  if (!currentEmployee) {
-    throw new Error('The current admin user profile could not be resolved.');
-  }
-
   const targetEmployee = state.employees.find((employee) => employee.id === employeeId) || null;
   if (!targetEmployee) {
     throw new Error('The target employee could not be found.');
@@ -610,152 +522,67 @@ async function updateEmployeeAdminAccessPermission(employeeId, canAccessAdmin) {
     throw new Error('Only active employees may receive Admin UI access.');
   }
 
-  if (currentEmployee.id === targetEmployee.id && canAccessAdmin) {
-    throw new Error('Employees cannot grant Admin UI access to themselves.');
-  }
-
-  const existingPermission = await getEmployeePermissionRecord(targetEmployee.id);
-  const nextPermission = buildEmployeePermissionRecord({
-    employeeId: targetEmployee.id,
-    canAccessAdmin,
-    permissionGrantedBy: canAccessAdmin ? currentEmployee.id : existingPermission?.permission_granted_by || null,
-    permissionGrantedAt: canAccessAdmin ? (existingPermission?.permission_granted_at || new Date().toISOString()) : (existingPermission?.permission_granted_at || null),
-    updatedAt: new Date().toISOString(),
+  const result = await requestAdminApi('/api/admin/employee-permissions', {
+    method: 'PUT',
+    body: { employeeId, canAccessAdmin },
   });
-
-  const { error } = await client
-    .from('employee_permissions')
-    .upsert(nextPermission, { onConflict: 'employee_id' });
-
-  if (error) {
-    throw error;
-  }
-
-  await hydrateEmployeePermissionsFromSupabase();
-  return nextPermission;
+  state.employeePermissions = state.employeePermissions.filter((entry) => entry.employee_id !== employeeId);
+  state.employeePermissions.push(result.permission);
+  return result.permission;
 }
 
-function ensureAccountSecurityState() {
-  state.security = state.security || {};
-  state.security.passwordHashes = state.security.passwordHashes || {};
-  state.security.accountPasswords = state.security.accountPasswords || {};
+function removeClientCredentialData(value, isRoot = false) {
+  if (!value || typeof value !== 'object') return false;
+  let removed = false;
+  if (isRoot && Object.prototype.hasOwnProperty.call(value, 'security')) {
+    delete value.security;
+    removed = true;
+  }
+  if (Array.isArray(value)) {
+    value.forEach((entry) => {
+      removed = removeClientCredentialData(entry) || removed;
+    });
+    return removed;
+  }
+  Object.entries(value).forEach(([key, entry]) => {
+    if (/(password|credential|access_token|refresh_token|device_secret|agent_token)/i.test(key)) {
+      delete value[key];
+      removed = true;
+      return;
+    }
+    removed = removeClientCredentialData(entry) || removed;
+  });
+  return removed;
 }
 
-async function linkEmployeeToSupabaseAuth(employeeRecord, passwordOverride = '') {
-  const client = getSupabaseClient();
-  if (!client) {
-    return null;
-  }
-
+async function linkEmployeeToSupabaseAuth(employeeRecord, passwordOverride = '', previousEmail = '') {
   const normalizedEmail = String(employeeRecord?.email || '').trim().toLowerCase();
   const normalizedPassword = String(passwordOverride || employeeRecord?.password || '').trim();
   const normalizedRole = normalizeAccountRole(employeeRecord?.accountRole || employeeRecord?.role) || 'Employee';
-  const normalizedName = String(employeeRecord?.name || '').trim();
-  const normalizedSurname = String(employeeRecord?.surname || '').trim();
-  const employeeKey = String(employeeRecord?.employeeId || employeeRecord?.employee_id || '').trim();
 
-  if (!normalizedEmail || !normalizedPassword) {
+  if (!normalizedEmail) {
     return null;
   }
 
   try {
-    const employeeLookup = await client
-      .from('employees')
-      .select('id')
-      .eq('email', normalizedEmail)
-      .maybeSingle();
-
-    if (employeeLookup.error && employeeLookup.error.code !== 'PGRST116') {
-      throw employeeLookup.error;
-    }
-
-    const employeeUpsertPayload = {
-      email: normalizedEmail,
-      name: normalizedName,
-      surname: normalizedSurname,
-      department: String(employeeRecord?.department || '').trim(),
-      role: getEmployeeRoleCategory(employeeRecord),
-      account_role: normalizedRole,
-      is_active: true,
-    };
-
-    if (employeeKey) {
-      employeeUpsertPayload.employee_id = employeeKey;
-    }
-
-    if (employeeLookup.data?.id) {
-      employeeUpsertPayload.id = employeeLookup.data.id;
-    }
-
-    const employeeUpdate = await client.from('employees').upsert(employeeUpsertPayload, { onConflict: 'email' });
-    if (employeeUpdate.error) {
-      throw employeeUpdate.error;
-    }
-
-    return { password: normalizedPassword };
+    const result = await requestAdminApi('/api/admin/employees', {
+      method: 'POST',
+      body: {
+        email: normalizedEmail,
+        previousEmail: String(previousEmail || employeeRecord?.previousEmail || '').trim().toLowerCase(),
+        password: normalizedPassword,
+        name: String(employeeRecord?.name || '').trim(),
+        surname: String(employeeRecord?.surname || '').trim(),
+        department: String(employeeRecord?.department || '').trim(),
+        employeeId: String(employeeRecord?.employeeId || employeeRecord?.employee_id || '').trim(),
+        accountRole: normalizedRole,
+        is_active: true,
+      },
+    });
+    return result.employee;
   } catch (error) {
     console.warn('Unable to sync the employee credential record.', error);
-    return null;
-  }
-}
-
-function getBuiltInAdminAccount() {
-  return {
-    email: DEFAULT_ADMIN_EMAIL,
-    password: DEFAULT_ADMIN_PASSWORD,
-    role: 'Administrator',
-    is_active: true,
-  };
-}
-
-async function ensureDefaultAdminAccount() {
-  const adminEmail = DEFAULT_ADMIN_EMAIL;
-  const defaultPassword = DEFAULT_ADMIN_PASSWORD;
-
-  state.security = state.security || {};
-  state.security.accountPasswords = state.security.accountPasswords || {};
-  state.security.passwordHashes = state.security.passwordHashes || {};
-  state.security.accountPasswords[adminEmail] = defaultPassword;
-  state.security.passwordHashes[adminEmail] = await secureHashString(defaultPassword);
-
-  const client = getSupabaseClient();
-  if (!client) return;
-
-  try {
-    const employeeLookup = await client
-      .from('employees')
-      .select('id')
-      .eq('email', adminEmail)
-      .maybeSingle();
-
-    if (employeeLookup.error && employeeLookup.error.code !== 'PGRST116') {
-      throw employeeLookup.error;
-    }
-
-    if (!employeeLookup.data) {
-      const createdEmployee = await client
-        .from('employees')
-        .upsert({
-          employee_id: 'EMP-ADMIN-001',
-          name: 'System Administrator',
-          surname: '',
-          email: adminEmail,
-          department: 'Administration',
-          role: 'Admin',
-          account_role: 'Administrator',
-          is_active: true,
-        }, { onConflict: 'email' })
-        .select('id')
-        .maybeSingle();
-
-      if (createdEmployee.error) {
-        throw createdEmployee.error;
-      }
-    }
-
-    await syncUserCredentialRecord(adminEmail, defaultPassword, 'Administrator', true);
-  } catch (error) {
-    console.warn('Unable to sync the default admin account to Supabase.', error);
+    throw error;
   }
 }
 
@@ -764,65 +591,23 @@ async function syncUserCredentialRecord(email, password, role = 'Employee', isAc
   const normalizedPassword = String(password || '').trim();
   const normalizedRole = normalizeAccountRole(role) || 'Employee';
 
-  if (!normalizedEmail || !normalizedPassword) {
-    return null;
-  }
-
-  const client = getSupabaseClient();
-  if (!client) return null;
+  if (!normalizedEmail) return null;
 
   try {
-    let employeeLookup = await client
-      .from('employees')
-      .select('id')
-      .eq('email', normalizedEmail)
-      .maybeSingle();
-
-    if (employeeLookup.error && employeeLookup.error.code !== 'PGRST116') {
-      throw employeeLookup.error;
-    }
-
-    if (!employeeLookup.data) {
-      const createdEmployee = await client
-        .from('employees')
-        .upsert({
-          employee_id: `EMP-${normalizedRole.toUpperCase().replace(/[^A-Z0-9]+/g, '-') || 'USER'}-${Date.now().toString().slice(-6)}`,
-          name: 'Auto',
-          surname: 'Created',
-          email: normalizedEmail,
-          department: 'Administration',
-          role: normalizeAccountRole(normalizedRole) === 'Administrator' ? 'Admin' : normalizeAccountRole(normalizedRole) || 'Employee',
-          account_role: normalizedRole,
-          is_active: true,
-        }, { onConflict: 'email' })
-        .select('id')
-        .maybeSingle();
-
-      if (createdEmployee.error) {
-        throw createdEmployee.error;
-      }
-
-      employeeLookup = createdEmployee;
-    }
-
-    const passwordHash = await secureHashString(normalizedPassword);
-    const payload = {
-      email: normalizedEmail,
-      employee_id: employeeLookup.data?.id || null,
-      password_hash: passwordHash,
-      role: normalizedRole,
-      is_active: Boolean(isActive),
-    };
-
-    const response = await client.from('user_credentials').upsert(payload, { onConflict: 'email' });
-    if (response.error) {
-      throw response.error;
-    }
-
-    return payload;
+    const result = await requestAdminApi('/api/admin/employees', {
+      method: 'POST',
+      body: {
+        email: normalizedEmail,
+        previousEmail: normalizedEmail,
+        password: normalizedPassword,
+        accountRole: normalizedRole,
+        is_active: Boolean(isActive),
+      },
+    });
+    return result.employee;
   } catch (error) {
     console.warn('Unable to sync the user credential record.', error);
-    return null;
+    throw error;
   }
 }
 
@@ -853,10 +638,6 @@ function resolveActiveAccountEmail() {
 state = loadState();
 hydrateStateFromSupabase().catch((error) => {
   console.warn('Supabase state hydration failed.', error);
-});
-ensureAccountSecurityState();
-ensureDefaultAdminAccount().catch((error) => {
-  console.warn('Default admin account bootstrap failed.', error);
 });
 normalizeEmployeeRoles();
 
@@ -894,29 +675,17 @@ function canAccessSecuritySettings() {
 
 async function verifyPasswordForUser(email, password) {
   const normalizedEmail = String(email || '').trim().toLowerCase();
-  const client = getSupabaseClient();
-
-  if (client && normalizedEmail) {
-    const backendUser = await getSupabaseLoginAccount(normalizedEmail);
-    if (!backendUser) return false;
-    const enteredHash = await secureHashString(password || '');
-    const storedHash = String(backendUser.password_hash || '').trim().toLowerCase();
-    const rawPasswordMatch = String(backendUser.password_hash || '').trim() === String(password || '').trim();
-    return Boolean((storedHash && storedHash === enteredHash.toLowerCase()) || rawPasswordMatch);
+  if (!normalizedEmail || normalizedEmail !== resolveActiveAccountEmail()) return false;
+  try {
+    const result = await requestAdminApi('/api/admin/account/verify-password', {
+      method: 'POST',
+      body: { password },
+    });
+    return result.valid === true;
+  } catch (error) {
+    console.warn('Unable to verify the current account password.', error);
+    return false;
   }
-
-  const hash = state.security?.passwordHashes?.[normalizedEmail];
-  if (hash) {
-    const value = await secureHashString(password || '');
-    return value === hash;
-  }
-
-  const rawPassword = state.security?.accountPasswords?.[normalizedEmail];
-  if (rawPassword !== undefined) {
-    return String(rawPassword || '').trim() === String(password || '').trim();
-  }
-
-  return false;
 }
 
 function mergeTicketLists(primaryTickets = [], secondaryTickets = []) {
@@ -985,33 +754,6 @@ function persistSharedTickets(tickets) {
   }
 }
 
-function getSupabaseClient() {
-  const runtimeConfig = typeof window !== 'undefined' && window.__APP_CONFIG__ && typeof window.__APP_CONFIG__ === 'object'
-    ? window.__APP_CONFIG__
-    : {};
-
-  if (runtimeConfig.supabaseClient && typeof runtimeConfig.supabaseClient.from === 'function') {
-    return runtimeConfig.supabaseClient;
-  }
-
-  if (window.supabase && typeof window.supabase.createClient === 'function') {
-    const config = getStoredSupabaseConfig();
-    if (config.url && config.anonKey) {
-      window.__APP_CONFIG__ = window.__APP_CONFIG__ || {};
-      window.__APP_CONFIG__.supabaseClient = window.supabase.createClient(config.url, config.anonKey, {
-        auth: {
-          persistSession: true,
-          autoRefreshToken: true,
-          detectSessionInUrl: true,
-        },
-      });
-      return window.__APP_CONFIG__.supabaseClient;
-    }
-  }
-
-  return null;
-}
-
 function getSecureSyncEndpoint() {
   const runtimeConfig = typeof window !== 'undefined' && window.__APP_CONFIG__ && typeof window.__APP_CONFIG__ === 'object'
     ? window.__APP_CONFIG__
@@ -1051,6 +793,29 @@ function getManagementApiEndpoint(path) {
   return path;
 }
 
+async function requestAdminApi(path, { method = 'GET', body } = {}) {
+  const token = getAdminApiSessionToken();
+  if (!token) throw new Error('Sign in again to continue.');
+  const response = await fetch(getManagementApiEndpoint(path), {
+    method,
+    headers: {
+      Authorization: `Bearer ${token}`,
+      ...(body === undefined ? {} : { 'Content-Type': 'application/json' }),
+    },
+    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+  });
+  let payload;
+  try {
+    payload = await response.json();
+  } catch (error) {
+    throw new Error(`Management API returned an invalid response (${response.status}).`);
+  }
+  if (!response.ok || payload?.ok !== true) {
+    throw new Error(payload?.error || `Management API returned ${response.status}.`);
+  }
+  return payload;
+}
+
 async function establishAdminApiSession(email, password) {
   try {
     const response = await fetch(getManagementApiEndpoint('/api/admin/session'), {
@@ -1073,13 +838,16 @@ async function establishAdminApiSession(email, password) {
 }
 
 async function hydrateStateFromSupabase() {
-  const client = getSupabaseClient();
-  if (!client) return null;
+  const apiToken = getAdminApiSessionToken();
+  if (!apiToken) return null;
 
   try {
+    const { state: serverState } = await requestAdminApi('/api/supabase-sync');
+
     const tableQueries = [
       ['settings', 'settings', true],
       ['employees', 'employees', false],
+      ['employee_permissions', 'employee_permissions', false],
       ['devices', 'devices', false],
       ['replacements', 'replacements', false],
       ['policies', 'policies', false],
@@ -1094,12 +862,7 @@ async function hydrateStateFromSupabase() {
     ];
 
     const results = await Promise.all(tableQueries.map(async ([frontendName, tableName, singleRow]) => {
-      const response = await client.from(tableName).select('*');
-      if (response.error) {
-        throw response.error;
-      }
-
-      const rows = Array.isArray(response.data) ? response.data : [];
+      const rows = Array.isArray(serverState[tableName]) ? serverState[tableName] : [];
       return { frontendName, rows, singleRow };
     }));
 
@@ -1111,8 +874,6 @@ async function hydrateStateFromSupabase() {
       }
       mapped[frontendName] = Array.isArray(rows) ? rows : [];
     });
-
-    await hydrateEmployeePermissionsFromSupabase();
 
     const baseState = JSON.parse(JSON.stringify(demoState));
     const mergedState = {
@@ -1135,6 +896,7 @@ async function hydrateStateFromSupabase() {
     const remapped = mapBackendStateToFrontend({
       settings: mapped.settings,
       employees: mapped.employees,
+      employee_permissions: mapped.employee_permissions,
       devices: mapped.devices,
       replacements: mapped.replacements,
       policies: mapped.policies,
@@ -1172,10 +934,11 @@ async function hydrateStateFromSupabase() {
     };
 
     state = mergeHydratedStateWithLocalState(loadState(), finalState);
+    removeClientCredentialData(state, true);
     normalizeEmployeeRoles();
     const sanitizedState = JSON.parse(JSON.stringify(state));
-    delete sanitizedState.security;
     localStorage.setItem(STORAGE_KEY, JSON.stringify(sanitizedState));
+    runAutomaticChangelogCleanup();
     return finalState;
   } catch (error) {
     console.warn('Supabase state hydration failed. Falling back to local storage.', error);
@@ -1184,67 +947,14 @@ async function hydrateStateFromSupabase() {
 }
 
 async function persistStateToSupabase() {
-  const secureEndpoint = getSecureSyncEndpoint();
-  if (secureEndpoint) {
-    try {
-      const response = await fetch(secureEndpoint, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${getAdminApiSessionToken()}`,
-        },
-        body: JSON.stringify({ state: mapFrontendStateToBackend(state) }),
-      });
-
-      if (!response.ok) {
-        throw new Error(`Secure backend sync returned ${response.status}.`);
-      }
-
-      return true;
-    } catch (error) {
-      console.warn('Secure backend sync failed; local storage remains authoritative.', error);
-    }
-  }
-
-  const client = getSupabaseClient();
-  if (!client) return false;
-
   try {
-    const payload = mapFrontendStateToBackend(state);
-    const tableOperations = [
-      ['settings', payload.settings ? [payload.settings] : []],
-      ['employees', Array.isArray(payload.employees) ? payload.employees : payload.employees ? [payload.employees] : []],
-      ['devices', Array.isArray(payload.devices) ? payload.devices : payload.devices ? [payload.devices] : []],
-      ['replacements', Array.isArray(payload.replacements) ? payload.replacements : payload.replacements ? [payload.replacements] : []],
-      ['policies', Array.isArray(payload.policies) ? payload.policies : payload.policies ? [payload.policies] : []],
-      ['schedules', Array.isArray(payload.schedules) ? payload.schedules : payload.schedules ? [payload.schedules] : []],
-      ['usage', Array.isArray(payload.usage) ? payload.usage : payload.usage ? [payload.usage] : []],
-      ['analytics_snapshot', payload.analytics_snapshot ? [payload.analytics_snapshot] : []],
-      ['notifications', Array.isArray(payload.notifications) ? payload.notifications : payload.notifications ? [payload.notifications] : []],
-      ['ticket_settings', payload.ticket_settings ? [payload.ticket_settings] : []],
-      ['ticket_category_settings', payload.ticket_category_settings ? [payload.ticket_category_settings] : []],
-      ['tickets', Array.isArray(payload.tickets) ? payload.tickets : payload.tickets ? [payload.tickets] : []],
-      ['changelog', Array.isArray(payload.changelog) ? payload.changelog : payload.changelog ? [payload.changelog] : []],
-    ];
-
-    for (const [tableName, rows] of tableOperations) {
-      if (!rows || rows.length === 0) continue;
-      const withId = rows.filter((row) => row && row.id);
-      const withoutId = rows.filter((row) => row && !row.id);
-
-      if (withId.length) {
-        const response = await client.from(tableName).upsert(withId, { onConflict: 'id' });
-        if (response.error) throw response.error;
-      }
-      if (withoutId.length) {
-        const response = await client.from(tableName).insert(withoutId);
-        if (response.error) throw response.error;
-      }
-    }
-
+    await requestAdminApi('/api/supabase-sync', {
+      method: 'POST',
+      body: { state: mapFrontendStateToBackend(state) },
+    });
     return true;
   } catch (error) {
-    console.warn('Supabase persistence failed.', error);
+    console.warn('Secure backend sync failed; local changes were not sent to Supabase.', error);
     return false;
   }
 }
@@ -1317,7 +1027,8 @@ function loadState() {
       safeState.settings.accentColor = DEFAULT_ACCENT_COLOR;
     }
 
-    if (!parsedState || versionChanged) {
+    const removedCredentials = removeClientCredentialData(safeState, true);
+    if (!parsedState || versionChanged || removedCredentials) {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(safeState));
     }
 
@@ -1330,9 +1041,9 @@ function loadState() {
 
 function saveState({ sync = true } = {}) {
   state.changelog = normalizeChangelogEntries(state.changelog);
+  removeClientCredentialData(state, true);
   try {
     const sanitizedState = JSON.parse(JSON.stringify(state));
-    delete sanitizedState.security;
     localStorage.setItem(STORAGE_KEY, JSON.stringify(sanitizedState));
     persistSharedTickets(state.tickets || []);
   } catch (error) {
@@ -1346,7 +1057,7 @@ function saveState({ sync = true } = {}) {
   const canAttemptSecureSync = typeof window !== 'undefined'
     && window.location.protocol !== 'file:'
     && Boolean(getSecureSyncEndpoint());
-  if (getSupabaseClient() || canAttemptSecureSync) {
+  if (canAttemptSecureSync) {
     return persistStateToSupabase().catch((error) => {
       console.warn('Deferred Supabase save failed.', error);
       return false;
@@ -1360,6 +1071,7 @@ function isAuthenticated() {
   try {
     const isLoggedIn = localStorage.getItem(LOGIN_STORAGE_KEY) === 'true';
     if (!isLoggedIn) return false;
+    if (getSecureSyncEndpoint() && !getAdminApiSessionToken()) return false;
 
     const rawSession = localStorage.getItem(AUTH_SESSION_KEY);
     if (!rawSession) return false;
@@ -1401,77 +1113,9 @@ function setAuthenticated(isLoggedIn, user = null) {
 }
 
 async function getSupabaseLoginAccount(email) {
-  const client = getSupabaseClient();
-  if (!client || !email) return null;
-
-  try {
-    const { data, error } = await client
-      .from('user_credentials')
-      .select('email, password_hash, role, is_active')
-      .eq('email', email)
-      .maybeSingle();
-
-    if (error) {
-      console.warn('Supabase login lookup failed.', error);
-      return null;
-    }
-
-    if (!data || data.is_active === false) {
-      return null;
-    }
-
-    return data;
-  } catch (error) {
-    console.warn('Supabase login lookup crashed.', error);
-    return null;
-  }
-}
-
-async function resolveSupabaseAuthRole(email, userId = null) {
-  const client = getSupabaseClient();
-  if (!client || !email) return '';
-
-  const normalizedEmail = String(email || '').trim().toLowerCase();
-
-  try {
-    const employeeQuery = client
-      .from('employees')
-      .select('role, account_role, auth_user_id')
-      .eq('email', normalizedEmail)
-      .maybeSingle();
-
-    const employeeResult = await employeeQuery;
-    if (!employeeResult.error && employeeResult.data) {
-      const candidateRole = employeeResult.data.account_role || employeeResult.data.role || '';
-      if (candidateRole) return String(candidateRole).trim();
-    }
-
-    if (userId) {
-      const byUserId = await client
-        .from('employees')
-        .select('role, account_role')
-        .eq('auth_user_id', userId)
-        .maybeSingle();
-      if (!byUserId.error && byUserId.data) {
-        const candidateRole = byUserId.data.account_role || byUserId.data.role || '';
-        if (candidateRole) return String(candidateRole).trim();
-      }
-    }
-
-    const credentialsResult = await client
-      .from('user_credentials')
-      .select('role')
-      .eq('email', normalizedEmail)
-      .maybeSingle();
-
-    if (!credentialsResult.error && credentialsResult.data?.role) {
-      return String(credentialsResult.data.role).trim();
-    }
-  } catch (error) {
-    console.warn('Unable to resolve the authenticated role from Supabase.', error);
-  }
-
-  return '';
+  if (!email) return null;
+  const result = await requestAdminApi(`/api/admin/account-exists?email=${encodeURIComponent(email)}`);
+  return result.exists ? { email: String(email).trim().toLowerCase() } : null;
 }
 
 async function loginUser(event) {
@@ -1482,65 +1126,32 @@ async function loginUser(event) {
   const errorBox = document.getElementById('login-error');
   const enteredEmail = (emailInput?.value || '').trim().toLowerCase();
   const enteredPassword = passwordInput?.value || '';
-  const client = getSupabaseClient();
-
-  const builtInAdmin = getBuiltInAdminAccount();
-  if (enteredEmail.toLowerCase() === builtInAdmin.email && enteredPassword === builtInAdmin.password) {
-    await establishAdminApiSession(builtInAdmin.email, enteredPassword);
-    const hasAdminUiAccess = true;
-    setAuthenticated(true, {
-      email: builtInAdmin.email,
-      role: builtInAdmin.role,
-      canAccessAdmin: hasAdminUiAccess,
-    });
-    if (errorBox) errorBox.textContent = '';
-
-    if (document.getElementById('summary-grid')) {
-      renderDashboard();
-      openChangelogModal(true);
-    } else {
-      sessionStorage.removeItem(CHANGELOG_SESSION_KEY);
-      window.location.href = 'index.html';
-    }
+  if (!enteredEmail || !enteredPassword || !await establishAdminApiSession(enteredEmail, enteredPassword)) {
+    if (errorBox) errorBox.textContent = 'Invalid administrator credentials or management API unavailable.';
     return;
   }
 
-  const supabaseAccount = enteredEmail ? await getSupabaseLoginAccount(enteredEmail) : null;
-  if (!supabaseAccount) {
-    if (errorBox) {
-      errorBox.textContent = 'Invalid email or password.';
-    }
+  setAuthenticated(true, {
+    email: enteredEmail,
+    role: 'Administrator',
+    canAccessAdmin: true,
+  });
+  const hydratedState = await hydrateStateFromSupabase();
+  if (!hydratedState) {
+    setAuthenticated(false);
+    clearAdminApiSession();
+    if (errorBox) errorBox.textContent = 'Signed in, but dashboard data could not be loaded from the management API.';
     return;
   }
 
-  const enteredHash = await secureHashString(enteredPassword);
-  const storedHash = String(supabaseAccount.password_hash || '').trim().toLowerCase();
-  const rawPasswordMatch = String(supabaseAccount.password_hash || '').trim() === String(enteredPassword || '').trim();
-
-  if ((storedHash && storedHash === enteredHash.toLowerCase()) || rawPasswordMatch) {
-    await establishAdminApiSession(enteredEmail, enteredPassword);
-    await hydrateEmployeePermissionsFromSupabase();
-    const resolvedRole = await resolveSupabaseAuthRole(enteredEmail) || supabaseAccount.role || 'Employee';
-    const hasAdminUiAccess = await currentSessionHasAdminAccessPermission();
-    setAuthenticated(true, {
-      email: supabaseAccount.email,
-      role: resolvedRole,
-      canAccessAdmin: hasAdminUiAccess,
-    });
-    if (errorBox) errorBox.textContent = '';
-
-    if (document.getElementById('summary-grid')) {
-      renderDashboard();
-      openChangelogModal(true);
-    } else {
-      sessionStorage.removeItem(CHANGELOG_SESSION_KEY);
-      window.location.href = 'index.html';
-    }
-    return;
-  }
-
-  if (errorBox) {
-    errorBox.textContent = 'Invalid email or password.';
+  if (errorBox) errorBox.textContent = '';
+  if (passwordInput) passwordInput.value = '';
+  if (document.getElementById('summary-grid')) {
+    renderDashboard();
+    openChangelogModal(true);
+  } else {
+    sessionStorage.removeItem(CHANGELOG_SESSION_KEY);
+    window.location.href = 'index.html';
   }
 }
 
@@ -1819,7 +1430,6 @@ async function handlePasswordChange(event) {
   const currentPassword = document.getElementById('current-password')?.value || '';
   const newPassword = document.getElementById('new-password')?.value || '';
   const confirmPassword = document.getElementById('confirm-password')?.value || '';
-  const passwordChangeRequested = Boolean(newPassword || confirmPassword || currentPassword);
 
   if (!currentEmail) {
     showSettingsMessage('account-security-message', 'error', 'There is no active account to update.');
@@ -1828,11 +1438,6 @@ async function handlePasswordChange(event) {
 
   if (emailInput && !newEmail) {
     emailInput.value = currentEmail;
-  }
-
-  if (!currentPassword && (newEmail && newEmail !== currentEmail || passwordChangeRequested)) {
-    showSettingsMessage('account-security-message', 'error', 'Please enter your current password to confirm the change.');
-    return;
   }
 
   if (!currentPassword) {
@@ -1852,7 +1457,13 @@ async function handlePasswordChange(event) {
   }
 
   if (newEmail && newEmail !== currentEmail) {
-    const duplicateUser = newEmail ? await getSupabaseLoginAccount(newEmail) : null;
+    let duplicateUser;
+    try {
+      duplicateUser = await getSupabaseLoginAccount(newEmail);
+    } catch (error) {
+      showSettingsMessage('account-security-message', 'error', error.message || 'Unable to verify that email address.');
+      return;
+    }
     if (duplicateUser && duplicateUser.email?.toLowerCase() !== currentEmail) {
       showSettingsMessage('account-security-message', 'error', 'That email address is already in use.');
       return;
@@ -1878,12 +1489,26 @@ async function handlePasswordChange(event) {
   }
 
   const nextEmail = newEmail || currentEmail;
-  const nextPassword = newPassword || currentPassword;
 
-  await syncUserCredentialRecord(nextEmail, nextPassword, getCurrentUserRole() || 'Administrator', true);
+  let accountUpdate;
+  try {
+    accountUpdate = await requestAdminApi('/api/admin/account', {
+      method: 'PUT',
+      body: {
+        currentPassword,
+        newEmail: nextEmail,
+        newPassword: newPassword || '',
+      },
+    });
+  } catch (error) {
+    showSettingsMessage('account-security-message', 'error', error.message || 'The account could not be updated.');
+    return;
+  }
+  sessionStorage.setItem('mindlock-admin-api-session', accountUpdate.token);
 
   const updatedUser = { email: nextEmail, role: getCurrentUserRole() || 'Administrator' };
   setAuthenticated(true, updatedUser);
+  state.settings.adminEmail = nextEmail;
   saveState();
 
   const form = document.getElementById('account-security-form');
@@ -1921,7 +1546,7 @@ function renderEmployeeRoleRows() {
     if (!isPrivilegedAccountRole(roleName)) {
       return 'No auth';
     }
-    return state.security?.accountPasswords?.[employee.email] || 'Not generated';
+    return 'Backend managed';
   };
 
   const headerRow = `
@@ -1930,7 +1555,7 @@ function renderEmployeeRoleRows() {
       <div class="role-user-laptop">Laptop</div>
       <div class="role-user-email">Email</div>
       <div class="role-user-role">Role</div>
-      <div class="role-user-auth">Auth / Password</div>
+      <div class="role-user-auth">Login</div>
       <div class="role-user-action">Actions</div>
     </div>
   `;
@@ -1969,7 +1594,6 @@ function openRoleAssignmentModal(employeeId) {
   const roleField = document.getElementById('role-assignment-role');
   const employeeIdField = document.getElementById('role-assignment-employee-id');
   const passwordField = document.getElementById('role-assignment-password');
-  const passwordButton = document.getElementById('generate-role-assignment-password');
 
   if (!modal || !nameField || !emailField || !roleField || !employeeIdField) return;
 
@@ -1980,15 +1604,11 @@ function openRoleAssignmentModal(employeeId) {
   roleField.setAttribute('data-selected-role', selectedRole);
   employeeIdField.value = employee.id;
 
-  const nextPassword = isPrivilegedAccountRole(selectedRole)
-    ? (state.security?.accountPasswords?.[employee.email] || generateTemporaryEmployeePassword())
-    : '';
   if (passwordField) {
-    passwordField.value = nextPassword;
+    passwordField.value = '';
     passwordField.disabled = !isPrivilegedAccountRole(selectedRole);
-  }
-  if (passwordButton) {
-    passwordButton.disabled = !isPrivilegedAccountRole(selectedRole);
+    passwordField.required = isPrivilegedAccountRole(selectedRole)
+      && !isPrivilegedAccountRole(employee.accountRole || employee.role || 'Employee');
   }
 
   modal.classList.remove('hidden');
@@ -2000,15 +1620,19 @@ function closeRoleAssignmentModal() {
   if (!modal) return;
   modal.classList.add('hidden');
   modal.setAttribute('aria-hidden', 'true');
+  const passwordField = document.getElementById('role-assignment-password');
+  if (passwordField) {
+    passwordField.value = '';
+    passwordField.required = false;
+  }
 }
 
 async function saveRoleAssignment(event) {
   event.preventDefault();
 
-  const modal = document.getElementById('role-assignment-modal');
   const employeeId = document.getElementById('role-assignment-employee-id')?.value;
   const selectedRole = document.getElementById('role-assignment-role')?.value;
-  const generatedPasswordInput = document.getElementById('role-assignment-password');
+  const passwordInput = document.getElementById('role-assignment-password');
   const currentUser = getCurrentSessionUser();
 
   if (!employeeId || !selectedRole) {
@@ -2034,40 +1658,31 @@ async function saveRoleAssignment(event) {
 
   const previousAccountRole = employee.accountRole;
   const previousRole = employee.role;
+  const previousNormalizedRole = normalizeAccountRole(previousAccountRole || previousRole) || 'Employee';
+  const password = String(passwordInput?.value || '').trim();
+  const roleChanged = normalizeAccountRole(selectedRole) !== previousNormalizedRole;
+  const requiresNewCredential = isPrivilegedAccountRole(selectedRole)
+    && !isPrivilegedAccountRole(previousNormalizedRole);
+  if (requiresNewCredential && password.length < 8) {
+    showSettingsMessage('role-assignment-message', 'error', 'Enter a password of at least 8 characters to create this privileged account.');
+    return;
+  }
+  if (password && (password.length < 8 || password.length > 1024)) {
+    showSettingsMessage('role-assignment-message', 'error', 'Passwords must contain between 8 and 1024 characters.');
+    return;
+  }
+
   employee.accountRole = selectedRole;
   employee.role = selectedRole === 'Administrator' ? 'Admin' : selectedRole;
 
-  let nextPassword = '';
-  if (isPrivilegedAccountRole(selectedRole)) {
-    const previousPassword = state.security?.accountPasswords?.[employee.email];
-    const previousHash = state.security?.passwordHashes?.[employee.email];
-    nextPassword = (generatedPasswordInput?.value || '').trim() || state.security?.accountPasswords?.[employee.email] || generateTemporaryEmployeePassword();
-    state.security = state.security || {};
-    state.security.accountPasswords = state.security.accountPasswords || {};
-    state.security.passwordHashes = state.security.passwordHashes || {};
-    state.security.accountPasswords[employee.email] = nextPassword;
-    const hash = await secureHashString(nextPassword);
-    state.security.passwordHashes[employee.email] = hash;
-
-    if (generatedPasswordInput) {
-      generatedPasswordInput.value = nextPassword;
-    }
-
-    const credentialRecord = await syncUserCredentialRecord(employee.email, nextPassword, selectedRole, true);
-    if (!credentialRecord) {
+  if (roleChanged || password) {
+    try {
+      const credentialRecord = await syncUserCredentialRecord(employee.email, password, selectedRole, true);
+      if (!credentialRecord) throw new Error('The backend did not confirm the account update.');
+    } catch (error) {
       employee.accountRole = previousAccountRole;
       employee.role = previousRole;
-      if (previousPassword === undefined) {
-        delete state.security.accountPasswords[employee.email];
-      } else {
-        state.security.accountPasswords[employee.email] = previousPassword;
-      }
-      if (previousHash === undefined) {
-        delete state.security.passwordHashes[employee.email];
-      } else {
-        state.security.passwordHashes[employee.email] = previousHash;
-      }
-      showSettingsMessage('role-assignment-message', 'error', 'The role was not saved because its login credentials could not be synced.');
+      showSettingsMessage('role-assignment-message', 'error', error.message || 'The role was not saved because the backend could not update the account.');
       return;
     }
   }
@@ -2076,10 +1691,8 @@ async function saveRoleAssignment(event) {
   logAdminAction('Updated', 'Employee role', `${employeeFullName} -> ${selectedRole}`);
   const databaseSynced = await saveState();
   renderEmployeeRoleRows();
-  if (modal) modal.classList.add('hidden');
-  const roleMessage = isPrivilegedAccountRole(selectedRole)
-    ? `Role updated for ${employeeFullName}. Generated login details for ${employee.email}.`
-    : `Role updated for ${employeeFullName}.`;
+  closeRoleAssignmentModal();
+  const roleMessage = `Role updated for ${employeeFullName}.`;
   showSettingsMessage('role-assignment-message', databaseSynced ? 'success' : 'error', databaseSynced
     ? roleMessage
     : `${roleMessage} Saved locally, but the database sync failed.`);
@@ -2093,10 +1706,12 @@ function normalizeAccentColor(color) {
   return /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(nextColor) ? nextColor : DEFAULT_ACCENT_COLOR;
 }
 
-function saveGeneralSettings() {
+async function saveGeneralSettings() {
   const adminEmailInput = document.getElementById('admin-email');
   const accentPicker = document.getElementById('accent-picker');
   const disposalRetentionDaysInput = document.getElementById('disposal-retention-days');
+  const changelogRetentionDaysInput = document.getElementById('changelog-retention-days');
+  const changelogAutoCleanupInput = document.getElementById('changelog-auto-cleanup-enabled');
 
   state.settings = state.settings || {};
   if (adminEmailInput) {
@@ -2111,14 +1726,27 @@ function saveGeneralSettings() {
     const nextValue = Number(disposalRetentionDaysInput.value);
     state.settings.disposalRetentionDays = Number.isFinite(nextValue) && nextValue >= 0 ? nextValue : 30;
   }
+  if (changelogRetentionDaysInput) {
+    state.settings.changelogRetentionDays = normalizeChangelogRetentionDays(changelogRetentionDaysInput.value);
+    changelogRetentionDaysInput.value = String(state.settings.changelogRetentionDays);
+  }
+  if (changelogAutoCleanupInput) {
+    state.settings.changelogAutoCleanupEnabled = changelogAutoCleanupInput.checked;
+  }
 
   try {
-    saveState();
+    const synced = await saveState();
     renderDashboard();
+    if (!synced) {
+      showToast('error', 'Settings saved locally', 'The management API did not confirm the settings update. Check your connection and sign in again to sync.');
+      return;
+    }
     showToast('success', 'General settings saved', 'Your general settings were updated successfully.');
+    lastChangelogCleanupAttemptDate = '';
+    runAutomaticChangelogCleanup();
   } catch (error) {
     console.error('Unable to save general settings.', error);
-    showToast('error', 'Save failed', 'The theme color could not be saved. Please try again.');
+    showToast('error', 'Save failed', error.message || 'General settings could not be saved. Please try again.');
   }
 }
 
@@ -2171,6 +1799,50 @@ function initializeSettingsPage() {
   const generalSettingsSaveButton = document.getElementById('general-settings-save');
   if (generalSettingsSaveButton) {
     generalSettingsSaveButton.addEventListener('click', saveGeneralSettings);
+  }
+
+  const changelogRetentionDaysInput = document.getElementById('changelog-retention-days');
+  const changelogAutoCleanupInput = document.getElementById('changelog-auto-cleanup-enabled');
+  if (changelogRetentionDaysInput) {
+    changelogRetentionDaysInput.value = String(getChangelogRetentionDays());
+  }
+  if (changelogAutoCleanupInput) {
+    changelogAutoCleanupInput.checked = state.settings?.changelogAutoCleanupEnabled !== false;
+  }
+  const changelogCleanupButton = document.getElementById('changelog-run-cleanup');
+  if (changelogCleanupButton) {
+    changelogCleanupButton.addEventListener('click', async () => {
+      if (changelogCleanupRunning) {
+        showToast('error', 'Cleanup already running', 'Wait for the current update-log cleanup to finish.');
+        return;
+      }
+      const days = normalizeChangelogRetentionDays(changelogRetentionDaysInput?.value);
+      state.settings = state.settings || {};
+      state.settings.changelogRetentionDays = days;
+      state.settings.changelogAutoCleanupEnabled = Boolean(changelogAutoCleanupInput?.checked);
+      if (changelogRetentionDaysInput) changelogRetentionDaysInput.value = String(days);
+      const status = document.getElementById('changelog-retention-status');
+      changelogCleanupButton.disabled = true;
+      try {
+        const settingsSynced = await saveState();
+        if (!settingsSynced) throw new Error('Retention settings could not be saved to the management API.');
+        if (days === 0) {
+          if (status) status.textContent = 'Retention is set to keep all update log entries; no cleanup was needed.';
+          showToast('success', 'Update log retained', 'All update log entries will be kept indefinitely.');
+          return;
+        }
+        const result = await cleanExpiredChangelogEntries(days);
+        const message = `Removed ${result.deleted} expired update log entr${result.deleted === 1 ? 'y' : 'ies'}.`;
+        if (status) status.textContent = message;
+        showToast('success', 'Update log cleanup complete', message);
+      } catch (error) {
+        console.error('Manual update log cleanup failed.', error);
+        if (status) status.textContent = error.message || 'Update log cleanup failed.';
+        showToast('error', 'Update log cleanup failed', error.message || 'Expired update log entries could not be removed.');
+      } finally {
+        changelogCleanupButton.disabled = false;
+      }
+    });
   }
 
   const notificationSettingsSaveButton = document.getElementById('settings-notifications-save');
@@ -2230,6 +1902,8 @@ function initializeSettingsPage() {
         document.getElementById('employee-email').value = employee.email;
         document.getElementById('employee-department').value = employee.department;
         document.getElementById('employee-role').value = getEmployeeRoleCategory(employee);
+        document.getElementById('employee-password').value = '';
+        document.getElementById('employee-confirm-password').value = '';
         return;
       }
 
@@ -2264,22 +1938,18 @@ function initializeSettingsPage() {
   if (roleSelect) {
     roleSelect.addEventListener('change', () => {
       const passwordField = document.getElementById('role-assignment-password');
-      const passwordButton = document.getElementById('generate-role-assignment-password');
+      const employeeId = document.getElementById('role-assignment-employee-id')?.value;
+      const employee = state.employees.find((item) => item.id === employeeId);
       const selectedRole = roleSelect.value || 'Employee';
-      const shouldGenerate = isPrivilegedAccountRole(selectedRole);
+      const isPrivileged = isPrivilegedAccountRole(selectedRole);
       roleSelect.setAttribute('data-selected-role', selectedRole);
       if (passwordField) {
-        passwordField.disabled = !shouldGenerate;
-        if (shouldGenerate && !passwordField.value) {
-          const employeeEmail = document.getElementById('role-assignment-email')?.textContent?.trim();
-          passwordField.value = employeeEmail ? (state.security?.accountPasswords?.[employeeEmail] || generateTemporaryEmployeePassword()) : generateTemporaryEmployeePassword();
-        }
-        if (!shouldGenerate) {
+        passwordField.disabled = !isPrivileged;
+        if (!isPrivileged) {
           passwordField.value = '';
         }
-      }
-      if (passwordButton) {
-        passwordButton.disabled = !shouldGenerate;
+        passwordField.required = isPrivileged
+          && !isPrivilegedAccountRole(employee?.accountRole || employee?.role || 'Employee');
       }
     });
     roleSelect.addEventListener('click', (event) => event.stopPropagation());
@@ -2301,57 +1971,13 @@ function initializeSettingsPage() {
     employeeConfirmPasswordToggle.addEventListener('click', () => togglePasswordFieldVisibility('employee-confirm-password', 'toggle-employee-confirm-password'));
   }
 
-  const generateRolePasswordButton = document.getElementById('generate-role-assignment-password');
-  if (generateRolePasswordButton) {
-    generateRolePasswordButton.addEventListener('click', () => {
-      const passwordField = document.getElementById('role-assignment-password');
-      const employeeEmail = document.getElementById('role-assignment-email')?.textContent?.trim();
-      const newPassword = generateTemporaryEmployeePassword();
-      if (passwordField) {
-        passwordField.value = newPassword;
-        passwordField.type = 'password';
-      }
-      if (employeeEmail) {
-        state.security = state.security || {};
-        state.security.accountPasswords = state.security.accountPasswords || {};
-        state.security.accountPasswords[employeeEmail] = newPassword;
-      }
-    });
-  }
-
-  const generateEmployeePasswordButton = document.getElementById('generate-employee-password');
-  if (generateEmployeePasswordButton) {
-    generateEmployeePasswordButton.addEventListener('click', () => {
-      const passwordField = document.getElementById('employee-password');
-      const confirmPasswordField = document.getElementById('employee-confirm-password');
-      const nextPassword = generateTemporaryEmployeePassword();
-      if (passwordField) {
-        passwordField.value = nextPassword;
-        passwordField.type = 'password';
-      }
-      if (confirmPasswordField) {
-        confirmPasswordField.value = nextPassword;
-        confirmPasswordField.type = 'password';
-      }
-    });
-  }
-
   const addAdminButton = document.getElementById('add-admin-button');
   if (addAdminButton) {
     addAdminButton.addEventListener('click', () => {
       openEmployeeModal();
       const employeeRoleField = document.getElementById('employee-role');
-      const employeePasswordField = document.getElementById('employee-password');
-      const employeeConfirmPasswordField = document.getElementById('employee-confirm-password');
-      const generatedPassword = generateTemporaryEmployeePassword();
       if (employeeRoleField) {
         employeeRoleField.value = 'Admin';
-      }
-      if (employeePasswordField) {
-        employeePasswordField.value = generatedPassword;
-      }
-      if (employeeConfirmPasswordField) {
-        employeeConfirmPasswordField.value = generatedPassword;
       }
     });
   }
@@ -2385,8 +2011,65 @@ function normalizeChangelogEntries(entries) {
 
   return Array.from(uniqueEntries.values())
     .sort((left, right) => String(right.date || '').localeCompare(String(left.date || ''))
-      || String(right.version || '').localeCompare(String(left.version || ''), undefined, { numeric: true, sensitivity: 'base' }))
-    .slice(0, MAX_CHANGELOG_ENTRIES);
+      || String(right.version || '').localeCompare(String(left.version || ''), undefined, { numeric: true, sensitivity: 'base' }));
+}
+
+function normalizeChangelogRetentionDays(value) {
+  const parsed = Number(value);
+  if (value === null || value === undefined || String(value).trim() === '') return 365;
+  return Number.isInteger(parsed) && parsed >= 0 && parsed <= 36500 ? parsed : 365;
+}
+
+function getChangelogRetentionDays() {
+  return normalizeChangelogRetentionDays(state.settings?.changelogRetentionDays);
+}
+
+function pruneChangelogEntries(cutoffDate) {
+  const before = Array.isArray(state.changelog) ? state.changelog.length : 0;
+  state.changelog = (Array.isArray(state.changelog) ? state.changelog : []).filter((entry) => {
+    const entryDate = String(entry?.date || '').slice(0, 10);
+    return !/^\d{4}-\d{2}-\d{2}$/.test(entryDate) || entryDate >= cutoffDate;
+  });
+  return before - state.changelog.length;
+}
+
+async function cleanExpiredChangelogEntries(retentionDays = getChangelogRetentionDays()) {
+  const days = normalizeChangelogRetentionDays(retentionDays);
+  if (days === 0) {
+    return { deleted: 0, cutoffDate: null };
+  }
+
+  const { deleted, cutoffDate } = await requestAdminApi('/api/admin/changelog/cleanup', {
+    method: 'POST',
+    body: { retentionDays: days },
+  });
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(cutoffDate || ''))) {
+    throw new Error('The management API returned an invalid update-log cleanup cutoff.');
+  }
+  const locallyRemoved = pruneChangelogEntries(cutoffDate);
+  saveState({ sync: false });
+  const deletedCount = Number(deleted);
+  return { deleted: Number.isFinite(deletedCount) ? deletedCount : locallyRemoved, cutoffDate };
+}
+
+async function runAutomaticChangelogCleanup() {
+  if (state.settings?.changelogAutoCleanupEnabled === false || getChangelogRetentionDays() === 0) return;
+  const today = new Date().toISOString().slice(0, 10);
+  if (changelogCleanupRunning || lastChangelogCleanupAttemptDate === today) return;
+  changelogCleanupRunning = true;
+  lastChangelogCleanupAttemptDate = today;
+  try {
+    const result = await cleanExpiredChangelogEntries();
+    const status = document.getElementById('changelog-retention-status');
+    if (status && result.deleted > 0) {
+      status.textContent = `Automatically removed ${result.deleted} expired update log entr${result.deleted === 1 ? 'y' : 'ies'}.`;
+    }
+  } catch (error) {
+    console.warn('Automatic update log cleanup failed.', error);
+    showToast('error', 'Update log cleanup failed', error.message || 'Expired update log entries could not be removed.');
+  } finally {
+    changelogCleanupRunning = false;
+  }
 }
 
 function getVersionFromDate(dateValue) {
@@ -4656,16 +4339,25 @@ async function saveEmployee(event) {
   const password = document.getElementById('employee-password')?.value.trim() || '';
   const confirmPassword = document.getElementById('employee-confirm-password')?.value.trim() || '';
   const editId = document.getElementById('employee-edit-id').value;
+  const existingEmployee = editId ? state.employees.find((employee) => employee.id === editId) : null;
 
   if (!name || !email || !department || !['Admin', 'Employee', 'IT Staff'].includes(role) || !employeeId) {
     return;
   }
 
   const accountRole = role === 'Admin' ? 'Administrator' : role;
-  const shouldCreateAuthUser = Boolean(password) || isPrivilegedAccountRole(accountRole);
-  const effectivePassword = shouldCreateAuthUser ? (password || generateTemporaryEmployeePassword()) : '';
+  const requiresPassword = isPrivilegedAccountRole(accountRole)
+    && (!existingEmployee || !isPrivilegedAccountRole(existingEmployee.accountRole || existingEmployee.role || 'Employee'));
 
-  if (shouldCreateAuthUser && password && confirmPassword && password !== confirmPassword) {
+  if ((requiresPassword && password.length < 8) || (password && password.length < 8)) {
+    alert('Enter a password of at least 8 characters for this account.');
+    return;
+  }
+  if (password && password.length > 1024) {
+    alert('Passwords cannot exceed 1024 characters.');
+    return;
+  }
+  if (password && password !== confirmPassword) {
     alert('The confirmation password does not match the first password entered.');
     return;
   }
@@ -4681,32 +4373,34 @@ async function saveEmployee(event) {
   };
   const authEmployeeRecord = {
     ...employeeRecord,
-    password: effectivePassword,
+    password,
   };
+  const previousEmail = editId
+    ? state.employees.find((employee) => employee.id === editId)?.email || ''
+    : '';
 
+  let savedEmployee;
+  try {
+    savedEmployee = await linkEmployeeToSupabaseAuth(authEmployeeRecord, password, previousEmail);
+  } catch (error) {
+    showToast('error', 'Employee was not saved', error.message || 'The management API could not save this employee.');
+    return;
+  }
+
+  const savedEmployeeRecord = {
+    ...employeeRecord,
+    id: savedEmployee.id,
+    employeeId: savedEmployee.employee_id || employeeId,
+    accountRole: savedEmployee.account_role || accountRole,
+  };
   if (editId) {
-    state.employees = state.employees.map((employee) => employee.id === editId ? { ...employee, ...employeeRecord } : employee);
+    state.employees = state.employees.map((employee) => employee.id === editId ? { ...employee, ...savedEmployeeRecord } : employee);
     logAdminAction('Edited', 'Employee', name);
   } else {
     state.employees.push({
-      id: `emp-${Date.now()}`,
-      ...employeeRecord,
+      ...savedEmployeeRecord,
     });
     logAdminAction('Added', 'Employee', name);
-  }
-
-  if (shouldCreateAuthUser) {
-    const nextPassword = effectivePassword || generateTemporaryEmployeePassword();
-    state.security = state.security || {};
-    state.security.accountPasswords = state.security.accountPasswords || {};
-    state.security.accountPasswords[email] = nextPassword;
-    const hash = await secureHashString(nextPassword);
-    state.security.passwordHashes = state.security.passwordHashes || {};
-    state.security.passwordHashes[email] = hash;
-    await linkEmployeeToSupabaseAuth(authEmployeeRecord, nextPassword);
-    syncUserCredentialRecord(email, nextPassword, accountRole, true).catch((error) => {
-      console.warn('Unable to sync privileged employee credential record.', error);
-    });
   }
 
   const assignedDevice = state.devices.find((device) => device.email === email || getEmployeeFullName({ name: device.user, surname: device.surname }) === name);
@@ -4858,8 +4552,8 @@ function openEmployeeModal(employee = null) {
     document.getElementById('employee-email').value = employee.email;
     document.getElementById('employee-department').value = employee.department;
     document.getElementById('employee-role').value = getEmployeeRoleCategory(employee);
-    document.getElementById('employee-password').value = state.security?.accountPasswords?.[employee.email] || '';
-    document.getElementById('employee-confirm-password').value = state.security?.accountPasswords?.[employee.email] || '';
+    document.getElementById('employee-password').value = '';
+    document.getElementById('employee-confirm-password').value = '';
   } else if (form) {
     form.reset();
     const editId = document.getElementById('employee-edit-id');
@@ -5461,13 +5155,6 @@ window.addEventListener('DOMContentLoaded', () => {
       setLoginTheme(nextTheme);
     });
     loginThemeToggle.dataset.themeListenerBound = 'true';
-  }
-
-  const emailInput = document.getElementById('login-email');
-  const passwordInput = document.getElementById('login-password');
-  if (emailInput && passwordInput && !emailInput.value && !passwordInput.value) {
-    emailInput.value = DEFAULT_ADMIN_EMAIL;
-    passwordInput.value = DEFAULT_ADMIN_PASSWORD;
   }
 
   if (loginForm) {

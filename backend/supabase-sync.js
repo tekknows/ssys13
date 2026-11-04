@@ -31,10 +31,10 @@ function createSyncRequestPayload(input = {}) {
   const features = state.features || settings.features || {};
 
   return {
-    settings: { ...settings, id: settings.id || '10000000-0000-4000-8000-000000000001' },
-    incognito_control: {
-      id: 1,
-      enabled: Boolean(features.incognitoBlocker ?? true),
+    settings: {
+      ...settings,
+      features,
+      id: settings.id || '10000000-0000-4000-8000-000000000001',
     },
     employees: normalizeRecords(state.employees),
     devices: normalizeRecords(state.devices),

@@ -1,6 +1,7 @@
 const DEFAULTS = {
   supabaseUrl: 'https://owuottmockghwcysnfig.supabase.co',
   supabaseAnonKey: 'sb_publishable_dLvhzyFjokO9E6BnMsvblg_MmLaNNaR',
+  apiBaseUrl: '',
   deviceId: '',
   deviceSecret: '',
   itManagerEmail: '',
@@ -29,6 +30,7 @@ async function loadSettings() {
   }
   document.getElementById('supabase-url').value = supabaseUrl;
   document.getElementById('supabase-anon-key').value = supabaseAnonKey;
+  document.getElementById('api-base-url').value = data.apiBaseUrl || '';
   document.getElementById('device-id').value = data.deviceId || '';
   document.getElementById('device-secret').value = data.deviceSecret || '';
   document.getElementById('it-manager-email').value = data.itManagerEmail || '';
@@ -40,6 +42,7 @@ form.addEventListener('submit', async (event) => {
   const data = {
     supabaseUrl: document.getElementById('supabase-url').value.trim(),
     supabaseAnonKey: document.getElementById('supabase-anon-key').value.trim(),
+    apiBaseUrl: document.getElementById('api-base-url').value.trim().replace(/\/+$/, ''),
     deviceId: document.getElementById('device-id').value.trim(),
     deviceSecret: document.getElementById('device-secret').value.trim(),
     itManagerEmail: document.getElementById('it-manager-email').value.trim(),
@@ -50,11 +53,15 @@ form.addEventListener('submit', async (event) => {
     if (supabaseUrl.protocol !== 'https:' && !['localhost', '127.0.0.1'].includes(supabaseUrl.hostname)) {
       throw new Error('Use an HTTPS Supabase URL, or localhost for local development.');
     }
+    const apiUrl = new URL(data.apiBaseUrl);
+    if (apiUrl.protocol !== 'https:' && !['localhost', '127.0.0.1'].includes(apiUrl.hostname)) {
+      throw new Error('Use an HTTPS management API URL, or localhost for local development.');
+    }
 
-    const originPattern = `${supabaseUrl.origin}/*`;
-    const alreadyGranted = await chrome.permissions.contains({ origins: [originPattern] });
+    const originPatterns = [`${supabaseUrl.origin}/*`, `${apiUrl.origin}/*`];
+    const alreadyGranted = await chrome.permissions.contains({ origins: originPatterns });
     if (!alreadyGranted) {
-      const granted = await chrome.permissions.request({ origins: [originPattern] });
+      const granted = await chrome.permissions.request({ origins: originPatterns });
       if (!granted) {
         throw new Error('Site access is required to synchronize categories and policies.');
       }

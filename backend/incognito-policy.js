@@ -1,5 +1,6 @@
 const crypto = require('node:crypto');
 const { getSupabaseClient } = require('./supabase.js');
+const { hashPassword, verifyPassword } = require('./password');
 
 const POLICY_NAME = 'incognito_blocking';
 const ADMIN_SESSION_TTL_SECONDS = 15 * 60;
@@ -66,10 +67,17 @@ async function issueAdministratorSession(email, password, env = process.env) {
   if (error) throw error;
   if (!credential || credential.is_active === false) return null;
 
-  const storedPassword = String(credential.password_hash || '').trim();
-  const hashedPassword = crypto.createHash('sha256').update(password, 'utf8').digest('hex');
-  if (!equalSecret(storedPassword.toLowerCase(), hashedPassword) && !equalSecret(storedPassword, password.trim())) {
-    return null;
+  if (!verifyPassword(password, credential.password_hash)) return null;
+  if (!String(credential.password_hash || '').startsWith('scrypt$')) {
+    const { data: upgraded, error: upgradeError } = await getSupabaseClient(env)
+      .from('user_credentials')
+      .update({ password_hash: hashPassword(password) })
+      .eq('email', normalizedEmail)
+      .eq('password_hash', credential.password_hash)
+      .select('email')
+      .maybeSingle();
+    if (upgradeError) throw upgradeError;
+    if (!upgraded) return null;
   }
 
   const employee = await findAdministrator(normalizedEmail, env);
@@ -182,7 +190,14 @@ async function authenticateAgent(deviceId, token, env = process.env) {
     .maybeSingle();
   if (deviceResult.error) throw deviceResult.error;
   const device = deviceResult.data;
-  return Boolean(device && device.is_registered === true && device.email && device.mac_address);
+  if (!device || device.is_registered !== true || !device.email || !device.mac_address) return false;
+
+  const { error: syncError } = await client
+    .from('devices')
+    .update({ last_sync: new Date().toISOString() })
+    .eq('id', normalizedDeviceId);
+  if (syncError) throw syncError;
+  return true;
 }
 
 async function getAgentIncognitoPolicy(env = process.env) {
