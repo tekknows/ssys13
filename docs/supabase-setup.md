@@ -88,24 +88,19 @@ The static dashboard reads runtime values from `window.__APP_CONFIG__` before `d
 ## Provision an administrator
 
 After applying both migrations and configuring the backend's Supabase URL and
-secret key, create or reset an administrator from a trusted machine. The
-password is read as a hidden PowerShell prompt and stored as a scrypt hash:
+secret key, create or reset an administrator from a trusted machine. Run the
+command in an interactive terminal; the provisioner prompts for the password
+without echoing it and stores only a scrypt hash:
 
 ```powershell
 $env:ADMIN_EMAIL = "admin@your-company.com"
-$securePassword = Read-Host "New administrator password" -AsSecureString
-$passwordPointer = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($securePassword)
-try {
-  $env:ADMIN_PASSWORD = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($passwordPointer)
-  npm run provision:admin
-} finally {
-  Remove-Item Env:ADMIN_PASSWORD -ErrorAction SilentlyContinue
-  [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($passwordPointer)
-}
+npm run provision:admin
 ```
 
 Run this from the repository root on the backend host, with `SUPABASE_URL` and
-`SUPABASE_SECRET_KEY` configured in its environment or `.env.local`. Do not
+`SUPABASE_SECRET_KEY` configured in its environment or `.env.local`. On Windows,
+if PowerShell blocks `npm.ps1`, run
+`& 'C:\Program Files\nodejs\npm.cmd' run provision:admin` instead. Do not
 commit the entered password or a password hash to SQL or source control.
 
 ## 4) Configure the extension
