@@ -33,8 +33,10 @@ dashboard and management API.
 The repository's API is a Node.js server started locally with
 `npm run start:backend`. It implements administrator sessions, global policy
 read/write, Windows agent policy checks, and dashboard state sync. The adapter
-at [`api/[...path].js`](../api/[...path].js) exposes these existing backend
-routes as a Vercel Node.js Function.
+at [`api/[...path].js`](../api/[...path].js) exposes the backend routes as a
+Vercel Node.js Function, and
+[`api/admin/session.js`](../api/admin/session.js) explicitly registers the
+login endpoint so it is available at `/api/admin/session`.
 
 Choose one of these approaches:
 
@@ -132,7 +134,8 @@ other administrators and browsers will not inherit it.
    `https://ssys13.vercel.app/api/health` returns
    `{"ok":true,"status":"ok"}`. Then check the dashboard's Network panel and
    confirm API requests go to `https://ssys13.vercel.app/api/...`, not
-   `localhost`.
+   `localhost`. A `POST` to `/api/admin/session` with `{}` should return 401,
+   not 404; this confirms the login function is deployed.
 
 Vercel environment variables are available to build or server code according to
 the framework and deployment configuration. They are **not automatically

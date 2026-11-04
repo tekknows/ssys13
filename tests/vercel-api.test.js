@@ -2,9 +2,16 @@ const assert = require('node:assert/strict');
 const http = require('node:http');
 const test = require('node:test');
 const handleApiRequest = require('../api/[...path]');
+const handleAdminSessionRequest = require('../api/admin/session');
 
 test('Vercel API adapter routes health and administrator session requests to the backend', async (context) => {
-  const server = http.createServer(handleApiRequest);
+  const server = http.createServer((req, res) => {
+    if (req.url === '/api/admin/session') {
+      handleAdminSessionRequest(req, res);
+      return;
+    }
+    handleApiRequest(req, res);
+  });
   await new Promise((resolve, reject) => {
     server.once('error', reject);
     server.listen(0, '127.0.0.1', resolve);
